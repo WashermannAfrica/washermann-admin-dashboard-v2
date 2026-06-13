@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+@theme {
+  --font-body: var(--font-dm-sans), system-ui, sans-serif;
+
+  /* ── Washermann Admin design tokens (sampled from Figma exports) ── */
+  --color-primary:      #13C490;  /* emerald CTA green                */
+  --color-primary-dark: #0FA97D;  /* hover                            */
+  --color-forest:       #08503C;  /* logo dark green                  */
+  --color-forest-deep:  #00281C;  /* darkest green (icons/sidebar)    */
+
+  --color-ink:          #181C24;  /* primary text                     */
+  --color-body:         #606060;  /* secondary text                   */
+  --color-faint:        #888C90;  /* placeholder / tertiary           */
+
+  --color-page:         #FCFCFC;  /* app background                   */
+  --color-section:      #F4F4F4;  /* grey wrapper panels              */
+  --color-line:         #ECECEC;  /* borders                          */
+  --color-mint-soft:    #E4F8F0;  /* active nav / soft green fill     */
+
+  --color-success:      #17B26A;
+  --color-success-bg:   #E7F8EF;
+  --color-warn:         #B47818;
+  --color-warn-bg:      #FCF0C9;
+  --color-danger:       #D2483B;
+  --color-danger-bg:    #FCE4E0;
+  --color-violet:       #9C74EC;
+  --color-violet-bg:    #F1EAFE;
+  --color-info:         #3B82C4;
+  --color-info-bg:      #E3F0FB;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  background: var(--color-page);
+  color: var(--color-ink);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar       { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d9d9d9; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #bdbdbd; }
