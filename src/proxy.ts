@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// Next.js 16 renamed Middleware to Proxy. This file replaces the legacy
+// middleware.ts convention (same functionality, native Next 16 convention).
+
 const PUBLIC_PATHS = ['/login', '/create-account', '/forgot-password', '/verify', '/reset-password', '/password-updated'];
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Allow public paths through
