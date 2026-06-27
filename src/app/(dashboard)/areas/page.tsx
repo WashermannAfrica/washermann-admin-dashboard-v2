@@ -1,70 +1,120 @@
 'use client';
 
-import { useState } from 'react';
-import { MapPin, Plus, Download, Search, ChevronDown, Users, WashingMachine, TriangleAlert } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { MapPin, Plus, Download, Search, ChevronDown, Users, WashingMachine, Bus } from 'lucide-react';
 import { PageKpi, StatBlock } from '@/components/ui/PageKpi';
 import { Section, Panel } from '@/components/ui/Section';
-import { Modal, ConfirmModal } from '@/components/ui/Modal';
+import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
-import { Input, SelectField } from '@/components/ui/Input';
+import { Input, SelectField, Textarea } from '@/components/ui/Input';
+import { TagInput } from '@/components/ui/TagInput';
 import { Chip } from '@/components/ui/Chip';
+import { Spinner } from '@/components/ui/Spinner';
 import { cn } from '@/lib/utils';
-import { AREAS, Area } from '@/lib/mock-data';
+import { api } from '@/lib/api';
+import type { Paginated } from '@/types';
+import type { Area } from '@/types/ops';
 
-const TOWNS: Record<string, string[]> = {
-  'Victoria Island': ['VI', 'Oniru'],
-  'Lekki Phase 1': ['Lekki Phase 1', 'chevron'],
-  'Ikeja GRA': ['GRA', 'Alausa'],
-  Yaba: ['Akoka', 'Sabo'],
-  Surulere: ['Aguda', 'Ijesha'],
-  'Victoria Island 2': ['Old Ikoyi', 'Banana Island'],
-  Gbagada: ['Phase 1', 'Phase 2'],
-  Ajah: ['Sangotedo', 'Abraham Adesanya'],
-  Magodo: ['Phase 1', 'Shangisha'],
-  'Ikoyi': ['Old Ikoyi', 'Banana Island'],
-};
+const NG_STATES = ['Lagos', 'FCT', 'Rivers', 'Oyo', 'Kano'];
 
-function AreaCard({ area, onDeactivate }: { area: Area; onDeactivate: () => void }) {
-  const towns = TOWNS[area.name] ?? ['Central', 'North'];
+function AreaCard({ area }: { area: Area }) {
+  const locs = area.locations ?? [];
+  const shown = locs.slice(0, 3);
+  const extra = locs.length - shown.length;
   return (
-    <Panel className="cursor-pointer transition-shadow hover:shadow-md" >
-      <div className="flex items-start justify-between">
-        <h3 className="font-bold text-ink">{area.name}</h3>
-        <button onClick={onDeactivate}><Chip>{area.status}</Chip></button>
-      </div>
-      <p className="mt-1.5 flex items-center gap-1 text-xs text-faint">
-        <MapPin size={12} /> {area.city}, Lagos&nbsp;&nbsp;Target: {area.activeOrders * 50} users
-      </p>
-      <div className="mt-3 flex flex-wrap items-center gap-1.5">
-        {towns.map((t) => (
-          <span key={t} className="rounded-md border border-line px-2 py-0.5 text-[11px] text-body">{t}</span>
-        ))}
-        <span className="rounded-md border border-line px-2 py-0.5 text-[11px] text-body">+3</span>
-      </div>
-      <div className="mt-4 flex items-center gap-4 border-t border-dashed border-line pt-3 text-xs text-faint">
-        <span className="flex items-center gap-1"><Users size={12} /> {area.reps} reps</span>
-        <span className="flex items-center gap-1"><WashingMachine size={12} /> {area.washermen} vendors</span>
-      </div>
-    </Panel>
+    <Link href={`/areas/${area.id}`} className="block">
+      <Panel className="cursor-pointer transition-shadow hover:shadow-md">
+        <div className="flex items-start justify-between">
+          <h3 className="font-bold text-ink">{area.name}</h3>
+          <Chip tone={area.isActive ? 'success' : 'neutral'}>{area.isActive ? 'Active' : 'Inactive'}</Chip>
+        </div>
+        <p className="mt-1.5 flex items-center gap-1 text-xs text-faint">
+          <MapPin size={12} /> {area.lga ? `${area.lga}, ` : ''}{area.state}&nbsp;&nbsp;Target: {area.targetUsers} users
+        </p>
+        <div className="mt-3 flex min-h-[1.75rem] flex-wrap items-center gap-1.5">
+          {shown.map((l) => (
+            <span key={l.id} className="rounded-md border border-line px-2 py-0.5 text-[11px] text-body">{l.name}</span>
+          ))}
+          {extra > 0 && <span className="rounded-md border border-line px-2 py-0.5 text-[11px] text-body">+{extra}</span>}
+          {locs.length === 0 && <span className="text-[11px] text-faint">No locations yet</span>}
+        </div>
+        <div className="mt-4 flex items-center gap-4 border-t border-dashed border-line pt-3 text-xs text-faint">
+          <span className="flex items-center gap-1"><Users size={12} /> {area.repsCount ?? 0} reps</span>
+          <span className="flex items-center gap-1"><WashingMachine size={12} /> {area.vendorsCount ?? 0} vendors</span>
+          <span className="flex items-center gap-1"><Bus size={12} /> {area.transportFeeWP} WP</span>
+        </div>
+      </Panel>
+    </Link>
   );
 }
 
 export default function AreasPage() {
+  const [areas, setAreas] = useState<Area[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
   const [addOpen, setAddOpen] = useState(false);
-  const [deactivating, setDeactivating] = useState<Area | null>(null);
   const [q, setQ] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [statusOpen, setStatusOpen] = useState(false);
 
-  const filtered = AREAS.filter(
+  const [form, setForm] = useState({ name: '', city: '', state: 'Lagos', targetUsers: '', transportFeeWP: '', description: '' });
+  const [towns, setTowns] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api
+      .get<Paginated<Area>>('/areas?limit=100')
+      .then((res) => setAreas(res.data.data))
+      .catch((err) => setError(err?.response?.data?.message ?? 'Failed to load areas.'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(load, [load]);
+
+  const filtered = areas.filter(
     (a) =>
       a.name.toLowerCase().includes(q.toLowerCase()) &&
-      (!statusFilter || a.status === statusFilter),
+      (!statusFilter || (statusFilter === 'Active' ? a.isActive : !a.isActive)),
   );
+  const townsCovered = areas.reduce((n, a) => n + (a.locations?.length ?? 0), 0);
+  const repsDeployed = areas.reduce((n, a) => n + (a.repsCount ?? 0), 0);
+
+  async function addArea(e: React.FormEvent) {
+    e.preventDefault();
+    setFormError('');
+    setSaving(true);
+    try {
+      await api.post('/areas', {
+        name: form.name.trim(),
+        state: form.state.trim(),
+        lga: form.city.trim() || undefined,
+        description: form.description.trim() || undefined,
+        transportFeeWP: Number(form.transportFeeWP || 0),
+        targetUsers: Number(form.targetUsers || 0),
+        locations: towns,
+      });
+      setAddOpen(false);
+      setForm({ name: '', city: '', state: 'Lagos', targetUsers: '', transportFeeWP: '', description: '' });
+      setTowns([]);
+      load();
+    } catch (err) {
+      const e2 = err as { response?: { data?: { message?: string | string[] } } };
+      const m = e2.response?.data?.message;
+      setFormError(Array.isArray(m) ? m.join(', ') : m ?? 'Could not create area.');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function exportCSV() {
-    const head = 'Name,City,Reps,Washermen,Active Orders,Status';
-    const body = filtered.map((a) => `"${a.name}","${a.city}",${a.reps},${a.washermen},${a.activeOrders},"${a.status}"`).join('\n');
+    const head = 'Name,State,City,Target Users,Locations,Transport Fee (WP),Status';
+    const body = filtered
+      .map((a) => `"${a.name}","${a.state}","${a.lga ?? ''}",${a.targetUsers},"${(a.locations ?? []).map((l) => l.name).join('; ')}",${a.transportFeeWP},"${a.isActive ? 'Active' : 'Inactive'}"`)
+      .join('\n');
     const blob = new Blob([head + '\n' + body], { type: 'text/csv' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
@@ -74,20 +124,14 @@ export default function AreasPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <PageKpi
-        icon={<MapPin size={16} />}
-        iconClass="bg-violet text-white"
-        label="Total Areas"
-        value={String(AREAS.length)}
-      />
+      <PageKpi icon={<MapPin size={16} />} iconClass="bg-violet text-white" label="Total Areas" value={String(areas.length)} />
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <StatBlock label="Towns Covered" value="05" />
-        <StatBlock label="Reps Deployed" value="06" />
+        <StatBlock label="Towns Covered" value={String(townsCovered)} />
+        <StatBlock label="Reps Deployed" value={String(repsDeployed)} />
       </div>
 
       <Section>
-        {/* toolbar */}
         <div className="flex flex-wrap items-center gap-2 pb-3">
           <div className="relative">
             <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-faint" />
@@ -138,47 +182,59 @@ export default function AreasPage() {
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((a) => (
-            <AreaCard key={a.id} area={a} onDeactivate={() => setDeactivating(a)} />
-          ))}
-        </div>
+        {loading ? (
+          <div className="flex justify-center py-16 text-primary"><Spinner size="lg" /></div>
+        ) : error ? (
+          <p className="py-12 text-center text-sm text-danger">{error}</p>
+        ) : filtered.length === 0 ? (
+          <p className="py-12 text-center text-sm text-faint">No areas found. Add your first area to get started.</p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {filtered.map((a) => <AreaCard key={a.id} area={a} />)}
+          </div>
+        )}
       </Section>
 
-      {/* Add Area — matches Add Area.png */}
+      {/* Add Area */}
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add Area">
-        <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); setAddOpen(false); }}>
-          <Input label="Area Name" required placeholder="e.g, Lekki North" />
-          <SelectField label="City" required defaultValue="">
-            <option value="" disabled>Select City</option>
-            <option>Lagos</option>
-            <option>Abuja</option>
-            <option>Port Harcourt</option>
+        <form className="space-y-4" onSubmit={addArea}>
+          <Input
+            label="Area Name" required placeholder="e.g. Lekki North"
+            value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+          />
+          <Input
+            label="City" placeholder="e.g. Eti-Osa"
+            value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
+          />
+          <SelectField
+            label="State" required value={form.state}
+            onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))}
+          >
+            {NG_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
           </SelectField>
-          <SelectField label="State" required defaultValue="">
-            <option value="" disabled>Select State</option>
-            <option>Lagos</option>
-            <option>FCT</option>
-            <option>Rivers</option>
-          </SelectField>
-          <Input label="Target Users" required type="number" placeholder="50" />
-          <Input label="Towns" required placeholder="Type town names and press enter" />
+          <Input
+            label="Target Users" type="number" placeholder="500"
+            value={form.targetUsers} onChange={(e) => setForm((f) => ({ ...f, targetUsers: e.target.value }))}
+          />
+          <TagInput
+            label="Towns" value={towns} onChange={setTowns}
+            placeholder="Type town names and press enter"
+          />
+          <Input
+            label="Transport Fee (WP)" required type="number" placeholder="150"
+            value={form.transportFeeWP} onChange={(e) => setForm((f) => ({ ...f, transportFeeWP: e.target.value }))}
+          />
+          <Textarea
+            label="Description" placeholder="Optional notes about this area"
+            value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+          />
+          {formError && <p className="rounded-xl bg-danger-bg px-4 py-2 text-sm text-danger">{formError}</p>}
           <div className="flex gap-3 pt-2">
             <Button type="button" variant="outline" className="flex-1" onClick={() => setAddOpen(false)}>Cancel</Button>
-            <Button type="submit" className="flex-1">Add Area</Button>
+            <Button type="submit" className="flex-1" loading={saving}>Add Area</Button>
           </div>
         </form>
       </Modal>
-
-      {/* Deactivate Area — matches Deactivate Area_.png */}
-      <ConfirmModal
-        open={!!deactivating}
-        onClose={() => setDeactivating(null)}
-        icon={<TriangleAlert size={20} />}
-        title={`Deactivate ${deactivating?.name ?? 'Area'}?`}
-        body="Deactivating this area will hide it from new orders and pause rep assignments. Vendors and reps in this area keep their accounts."
-        confirmLabel="Deactivate"
-      />
     </div>
   );
 }

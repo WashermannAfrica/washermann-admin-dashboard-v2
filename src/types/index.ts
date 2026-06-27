@@ -23,7 +23,7 @@ export interface LoginResponse {
 
 // ─── Users ────────────────────────────────────────────────────────────────────
 
-export interface User {
+export type User = {
   id: string;
   fullName: string;
   email: string | null;
@@ -34,7 +34,7 @@ export interface User {
   phoneVerified: boolean;
   createdAt: string;
   updatedAt: string;
-}
+};
 
 export interface PaginatedUsers {
   data: User[];

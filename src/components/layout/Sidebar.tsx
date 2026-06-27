@@ -17,6 +17,9 @@ import {
   ShieldCheck,
   CircleHelp,
   Settings,
+  Gift,
+  Shirt,
+  Mail,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -35,12 +38,15 @@ const MAIN: NavItem[] = [
   { label: 'Companies',     href: '/companies',     icon: <Building2 size={16} /> },
   { label: 'Areas',         href: '/areas',         icon: <MapPin size={16} /> },
   { label: 'Reps',          href: '/reps',          icon: <UserRound size={16} /> },
+  { label: 'Referrals',     href: '/referrals',     icon: <Gift size={16} /> },
   { label: 'Washerman',     href: '/washerman',     icon: <WashingMachine size={16} /> },
+  { label: 'Catalogue',     href: '/catalogue',     icon: <Shirt size={16} /> },
   { label: 'Users',         href: '/users',         icon: <Users size={16} /> },
   { label: 'Disputes',      href: '/disputes',      icon: <Scale size={16} /> },
   { label: 'Financials',    href: '/financials',    icon: <Banknote size={16} /> },
   { label: 'Washer-points', href: '/washer-points', icon: <CircleDollarSign size={16} /> },
   { label: 'Admins & Staff', href: '/staff',        icon: <ShieldCheck size={16} /> },
+  { label: 'Templates',     href: '/templates',     icon: <Mail size={16} /> },
 ];
 
 const OTHERS: NavItem[] = [

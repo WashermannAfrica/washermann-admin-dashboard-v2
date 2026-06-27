@@ -67,7 +67,10 @@ function LoginForm() {
     }
 
     try {
-      const { data } = await axios.post<LoginResponse>(`${BASE_URL}/auth/login`, { email, password });
+      const { data } = await axios.post<LoginResponse>(`${BASE_URL}/auth/login`, {
+        identifier: email.trim(),
+        password,
+      });
       const { user, accessToken, refreshToken } = data.data;
 
       if (!user.roles?.some((r: string) => ADMIN_ROLES.includes(r))) {

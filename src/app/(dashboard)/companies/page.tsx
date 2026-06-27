@@ -1,104 +1,115 @@
 'use client';
 
-import { useState } from 'react';
-import Link from 'next/link';
-import { Building2, Plus, Mail } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Building2, Power, TriangleAlert } from 'lucide-react';
 import { PageKpi, StatBlock } from '@/components/ui/PageKpi';
 import { DataTable, Column } from '@/components/ui/DataTable';
 import { Chip } from '@/components/ui/Chip';
 import { Avatar } from '@/components/ui/Avatar';
-import { Modal } from '@/components/ui/Modal';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { Input, Textarea, SelectField } from '@/components/ui/Input';
-import { COMPANIES_DATA, Company } from '@/lib/mock-data';
+import { ConfirmModal } from '@/components/ui/Modal';
+import { Spinner } from '@/components/ui/Spinner';
+import { api } from '@/lib/api';
+import { apiErr } from '@/lib/apiError';
+import { formatDate } from '@/lib/utils';
+import type { Paginated } from '@/types';
+import type { Company } from '@/types/ops';
 
 export default function CompaniesPage() {
-  const [addOpen, setAddOpen] = useState(false);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [toggling, setToggling] = useState<Company | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api
+      .get<Paginated<Company>>('/companies?limit=100')
+      .then((res) => { setCompanies(res.data.data); setTotal(res.data.meta.total); })
+      .catch((err) => setError(apiErr(err)))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(load, [load]);
+
+  async function confirmToggle() {
+    if (!toggling) return;
+    setBusy(true);
+    const next = toggling.status === 'active' ? 'inactive' : 'active';
+    try {
+      await api.patch(`/companies/${toggling.id}/status`, { status: next });
+      setToggling(null);
+      load();
+    } catch (err) {
+      setError(apiErr(err));
+      setToggling(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const awaiting = companies.filter((c) => c.activationStatus === 'awaiting_approval').length;
+  const activeCount = companies.filter((c) => c.status === 'active').length;
 
   const columns: Column<Company>[] = [
-    {
-      key: 'name', header: 'Name', sortable: true, value: (c) => c.name,
-      render: (c) => (
-        <span className="flex items-center gap-2.5 font-medium text-ink">
-          <Avatar name={c.name} size={28} /> {c.name}
-        </span>
-      ),
-    },
-    { key: 'contact', header: 'Contact Person', render: (c) => <span className="font-medium text-ink">{c.email}</span> },
-    { key: 'employees', header: 'Workers', render: (c) => <span className="text-body">{c.employees}</span> },
-    {
-      key: 'wallet', header: 'Wallet', render: (c) => (
-        <span>
-          <span className="block font-semibold text-ink">₦{(parseInt(c.walletWp) * 0.115 * 1000).toLocaleString()}</span>
-          <span className="text-xs text-faint">{c.walletWp}</span>
-        </span>
-      ),
-    },
+    { key: 'name', header: 'Name', sortable: true, value: (c) => c.name, render: (c) => <span className="flex items-center gap-2.5 font-medium text-ink"><Avatar name={c.name} size={28} /> {c.name}</span> },
+    { key: 'owner', header: 'Owner', render: (c) => <span className="text-body">{c.ownerEmail}</span> },
+    { key: 'industry', header: 'Industry', render: (c) => <span className="text-body">{c.industry ?? '—'}</span> },
+    { key: 'activation', header: 'Activation', value: (c) => c.activationStatus, render: (c) => <Badge variant={c.activationStatus === 'active' ? 'success' : 'warning'}>{c.activationStatus.replace(/_/g, ' ')}</Badge> },
     { key: 'status', header: 'Status', sortable: true, value: (c) => c.status, render: (c) => <Chip>{c.status}</Chip> },
+    { key: 'joined', header: 'Joined', render: (c) => <span className="text-body">{formatDate(c.createdAt)}</span> },
     {
-      key: 'view', header: '', render: (c) => (
-        <Link href={`/companies/${c.id}`} className="font-medium text-ink underline-offset-2 hover:underline">
-          View Detail
-        </Link>
+      key: 'actions', header: '', render: (c) => (
+        <div className="flex justify-end">
+          <Button size="sm" variant={c.status === 'active' ? 'outline' : 'soft'} onClick={() => setToggling(c)}>
+            <Power size={13} /> {c.status === 'active' ? 'Suspend' : 'Activate'}
+          </Button>
+        </div>
       ),
     },
   ];
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <PageKpi
-        icon={<Building2 size={16} />}
-        iconClass="bg-violet text-white"
-        label="Total Companies"
-        value="200"
-        delta="+6 over the last 7 days"
-      />
+      <PageKpi icon={<Building2 size={16} />} iconClass="bg-info text-white" label="Total Companies" value={String(total)} />
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <StatBlock label="Best Performing" value="SparkleWash" hint="↗ 610 · 580 orders · ₦3,200,000" />
-        <StatBlock label="Active Companies" value="100" hint="↘ 55 · Currently working" />
+        <StatBlock label="Active" value={String(activeCount)} hint="Live accounts" />
+        <StatBlock label="Awaiting approval" value={String(awaiting)} hint="Need review" />
       </div>
 
-      <DataTable
-        columns={columns}
-        rows={COMPANIES_DATA}
-        searchPlaceholder="Search by employee"
-        filters={[{ label: 'Status', options: [] }, { label: 'Tier', options: [] }]}
-        pageSize={5}
-        headerExtra={
-          <button
-            onClick={() => setAddOpen(true)}
-            className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-4 text-[13px] font-semibold text-white hover:bg-primary-dark transition-colors"
-          >
-            <Plus size={14} /> Add Company
-          </button>
-        }
-      />
+      {loading ? (
+        <div className="flex justify-center py-16 text-primary"><Spinner size="lg" /></div>
+      ) : error ? (
+        <p className="py-12 text-center text-sm text-danger">{error}</p>
+      ) : (
+        <DataTable
+          columns={columns}
+          rows={companies}
+          searchPlaceholder="Search by name or owner"
+          filters={[{ label: 'Status', options: [] }, { label: 'Activation', options: [] }]}
+          pageSize={10}
+          emptyText="No companies yet."
+        />
+      )}
 
-      {/* Add Company — matches Add Company.png */}
-      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add Company">
-        <form
-          className="space-y-4"
-          onSubmit={(e) => { e.preventDefault(); setAddOpen(false); }}
-        >
-          <Input label="Company Name" required placeholder="e.g, ABC Transport" />
-          <Input label="Email" required type="email" placeholder="you@company.com" leftIcon={<Mail size={15} />} />
-          <Input label="Phone number" required placeholder="+234 (555) 000-0000" />
-          <SelectField label="Industry" required defaultValue="">
-            <option value="" disabled>Select industry</option>
-            <option>Logistics</option>
-            <option>Hospitality</option>
-            <option>Technology</option>
-            <option>Manufacturing</option>
-            <option>Other</option>
-          </SelectField>
-          <Textarea label="Address" placeholder="Enter company's address" />
-          <div className="flex gap-3 pt-2">
-            <Button type="button" variant="outline" className="flex-1" onClick={() => setAddOpen(false)}>Cancel</Button>
-            <Button type="submit" className="flex-1">Save</Button>
-          </div>
-        </form>
-      </Modal>
+      <ConfirmModal
+        open={!!toggling}
+        onClose={() => setToggling(null)}
+        onConfirm={confirmToggle}
+        icon={<TriangleAlert size={20} />}
+        danger={toggling?.status === 'active'}
+        title={toggling?.status === 'active' ? `Suspend ${toggling?.name}?` : `Activate ${toggling?.name}?`}
+        body={
+          toggling?.status === 'active'
+            ? 'Suspending blocks the company and its employees from placing new orders. Wallet balances are preserved.'
+            : 'Activating lets the company and its employees place orders again.'
+        }
+        confirmLabel={busy ? 'Saving…' : toggling?.status === 'active' ? 'Suspend' : 'Activate'}
+      />
     </div>
   );
 }
