@@ -1,166 +1,122 @@
 'use client';
 
-import { useState } from 'react';
-import { Banknote, ChevronRight, Check } from 'lucide-react';
-import { Section, Panel } from '@/components/ui/Section';
-import { LineChart } from '@/components/ui/LineChart';
+import { useCallback, useEffect, useState } from 'react';
+import { Banknote, CircleDollarSign, Users, Building2, Check } from 'lucide-react';
+import { Panel } from '@/components/ui/Section';
 import { DataTable, Column } from '@/components/ui/DataTable';
 import { Chip } from '@/components/ui/Chip';
-import { Avatar } from '@/components/ui/Avatar';
-import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
+import { Modal } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
-import { TRANSACTIONS, DISPUTES_SERIES, Txn } from '@/lib/mock-data';
+import { api } from '@/lib/api';
+import { apiErr } from '@/lib/apiError';
+import { formatDate } from '@/lib/utils';
+import type { ApiResponse, Paginated } from '@/types';
+import type { AdminOverview, VendorPayout } from '@/types/ops';
 
-const SCANS = [
-  { name: 'Full Scan', desc: 'All ledgers and reconciliations' },
-  { name: 'Wallet Scan', desc: 'User wallet balance integrity' },
-  { name: 'Escrow Scan', desc: 'Held funds vs commitments' },
-  { name: 'Payout Scan', desc: 'Vendor disbursement matches' },
-  { name: 'Revenue Scan', desc: 'Fees, commissions, taxes' },
-];
+const naira = (n: number | null) => `₦${Number(n ?? 0).toLocaleString()}`;
+const wp = (n: number) => `${Number(n || 0).toLocaleString()} WP`;
+
+function Kpi({ icon, iconClass, label, value, sub }: { icon: React.ReactNode; iconClass: string; label: string; value: string; sub?: string }) {
+  return (
+    <Panel>
+      <div className="flex items-center gap-3">
+        <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${iconClass}`}>{icon}</span>
+        <div>
+          <p className="text-xs text-faint">{label}</p>
+          <p className="text-xl font-bold text-ink">{value}</p>
+        </div>
+      </div>
+      {sub && <p className="mt-2 text-xs text-body">{sub}</p>}
+    </Panel>
+  );
+}
 
 export default function FinancialsPage() {
-  const [scanStep, setScanStep] = useState<0 | 1 | 2 | 3>(0);
-  const [scanType, setScanType] = useState('Full Scan');
+  const [overview, setOverview] = useState<AdminOverview | null>(null);
+  const [payouts, setPayouts] = useState<VendorPayout[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [approving, setApproving] = useState<VendorPayout | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  function runScan(name: string) {
-    setScanType(name);
-    setScanStep(2);
-    setTimeout(() => setScanStep(3), 1800);
+  const load = useCallback(() => {
+    setLoading(true);
+    Promise.all([
+      api.get<ApiResponse<AdminOverview>>('/admin/overview'),
+      api.get<Paginated<VendorPayout>>('/payouts?limit=100'),
+    ])
+      .then(([o, p]) => { setOverview(o.data.data); setPayouts(p.data.data); })
+      .catch((err) => setError(apiErr(err)))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(load, [load]);
+
+  async function approve() {
+    if (!approving) return;
+    setBusy(true);
+    try {
+      await api.post(`/payouts/${approving.id}/approve`);
+      setApproving(null);
+      load();
+    } catch (err) {
+      setError(apiErr(err));
+    } finally {
+      setBusy(false);
+    }
   }
 
-  const columns: Column<Txn>[] = [
-    { key: 'type', header: 'Type', sortable: true, value: (t) => t.type, render: (t) => <span className="font-medium text-ink">{t.type}</span> },
+  const pendingCount = payouts.filter((p) => p.status === 'pending').length;
+
+  const columns: Column<VendorPayout>[] = [
+    { key: 'vendor', header: 'Vendor', render: (p) => <span className="font-mono text-xs text-ink">{p.vendorId.slice(0, 8)}…</span> },
+    { key: 'amount', header: 'Amount', sortable: true, value: (p) => p.nairaAmount, render: (p) => <span className="font-semibold text-ink">{naira(p.nairaAmount)} <span className="text-xs text-faint">({wp(p.amountWP)})</span></span> },
+    { key: 'dest', header: 'Destination', render: (p) => <span className="text-body">{p.accountName} · {p.accountNumber} · {p.bankCode}</span> },
+    { key: 'status', header: 'Status', sortable: true, value: (p) => p.status, render: (p) => <Chip>{p.status}</Chip> },
+    { key: 'date', header: 'Requested', render: (p) => <span className="text-body">{formatDate(p.createdAt)}</span> },
     {
-      key: 'from', header: 'From', render: (t) => (
-        <span className="flex items-center gap-2.5 font-medium text-ink">
-          <Avatar name={t.from} size={28} /> {t.from}
-        </span>
-      ),
+      key: 'actions', header: '', render: (p) =>
+        p.status === 'pending' ? (
+          <div className="flex justify-end"><Button size="sm" variant="soft" onClick={() => setApproving(p)} disabled={busy}><Check size={13} /> Approve</Button></div>
+        ) : <span className="text-xs text-faint">{p.failureReason ?? '—'}</span>,
     },
-    { key: 'amount', header: 'Amount', render: (t) => <span className="font-medium text-ink">{t.amount}</span> },
-    { key: 'date', header: 'Date', sortable: true, value: (t) => t.date, render: (t) => <span className="text-body">{t.date}</span> },
-    { key: 'status', header: 'Status', sortable: true, value: (t) => t.status, render: (t) => <Chip>{t.status}</Chip> },
   ];
+
+  if (loading) return <div className="flex justify-center py-24 text-primary"><Spinner size="lg" /></div>;
+  if (error) return <p className="py-12 text-center text-sm text-danger">{error}</p>;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      {/* Header KPI + actions — matches Financials.png */}
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-line pb-6">
-        <div>
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-white">
-            <Banknote size={16} />
-          </span>
-          <p className="mt-3 text-[13px] text-body">Company Fundings</p>
-          <p className="mt-1 text-5xl font-bold tracking-tight text-ink">₦350,000</p>
-          <p className="mt-2 text-xs font-medium text-success">↗ + 245,000 wash points</p>
-        </div>
-        <div className="flex gap-2 pt-2">
-          <Button variant="outline" onClick={() => setScanStep(1)}>Run Discrepancy Check</Button>
-          <Button>Pay All Vendors (₦171,700)</Button>
-        </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Kpi icon={<CircleDollarSign size={18} />} iconClass="bg-primary text-white" label="WP in circulation" value={wp(overview?.washPoints.inCirculation ?? 0)} />
+        <Kpi icon={<Users size={18} />} iconClass="bg-violet text-white" label="User-held WP" value={wp(overview?.washPoints.userHeld ?? 0)} />
+        <Kpi icon={<Building2 size={18} />} iconClass="bg-info text-white" label="Company-held WP" value={wp(overview?.washPoints.companyHeld ?? 0)} />
+        <Kpi icon={<Banknote size={18} />} iconClass="bg-warn text-white" label="Payouts pending" value={String(pendingCount)} sub={`${payouts.length} total`} />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-2xl bg-section px-5 py-4">
-          <p className="text-[13px] text-body">Escrows</p>
-          <p className="mt-1 text-2xl font-bold text-ink">₦1,850,000</p>
-          <p className="mt-1.5 text-xs text-faint">≈ 18.1M wash points</p>
-        </div>
-        <div className="rounded-2xl bg-section px-5 py-4">
-          <p className="text-[13px] text-body">Payouts</p>
-          <p className="mt-1 text-2xl font-bold text-ink">₦4,320,000</p>
-          <p className="mt-1.5 text-xs text-faint">≈ 42.3M wash points paid out</p>
-        </div>
-        <div className="rounded-2xl bg-section px-5 py-4">
-          <p className="text-[13px] text-body">User Fundings (top-ups by users)</p>
-          <p className="mt-1 text-2xl font-bold text-ink">₦6,750,000</p>
-          <p className="mt-1.5 text-xs text-faint">≈ 66.1M wash-points purchased</p>
-        </div>
+      <div>
+        <h2 className="mb-3 text-sm font-bold text-ink">Vendor payouts</h2>
+        <DataTable
+          columns={columns}
+          rows={payouts}
+          searchPlaceholder="Search payouts"
+          filters={[{ label: 'Status', options: [] }]}
+          pageSize={10}
+          emptyText="No vendor payout requests yet."
+        />
       </div>
 
-      <div className="grid gap-4 border-b border-line pb-6 sm:grid-cols-2">
-        <div>
-          <p className="text-[13px] text-body">Revenue</p>
-          <p className="mt-1 text-2xl font-bold text-ink">₦985,000</p>
-          <p className="mt-1 text-xs text-faint">Platform earnings this month</p>
+      <Modal open={!!approving} onClose={() => setApproving(null)} title={`Approve payout · ${approving ? naira(approving.nairaAmount) : ''}`}>
+        <div className="space-y-4">
+          <p className="text-sm text-body">
+            Disburse {approving ? naira(approving.nairaAmount) : ''} to {approving?.accountName} ({approving?.accountNumber}). This debits the vendor wallet and initiates the bank transfer.
+          </p>
+          <div className="flex gap-3">
+            <Button variant="outline" className="flex-1" onClick={() => setApproving(null)}>Cancel</Button>
+            <Button className="flex-1" loading={busy} onClick={approve}>Approve &amp; pay</Button>
+          </div>
         </div>
-        <div>
-          <p className="text-[13px] text-body">Current Conversion rate</p>
-          <p className="mt-1 text-2xl font-bold text-ink">₦100 = 980 wash points</p>
-          <p className="mt-1 text-xs text-faint">Current rate</p>
-        </div>
-      </div>
-
-      {/* Disputes per month chart */}
-      <Section>
-        <Panel>
-          <p className="text-[13px] text-body">Disputes per Month by Status</p>
-          <div className="mt-2">
-            <LineChart
-              legend
-              rangeLabel="12 Months"
-              series={[
-                { name: 'Credits', color: '#13C490', data: DISPUTES_SERIES.credits },
-                { name: 'Payouts', color: '#0FA97D', data: DISPUTES_SERIES.payouts },
-                { name: 'Escrows', color: '#7BD7BC', data: DISPUTES_SERIES.escrows },
-              ]}
-            />
-          </div>
-        </Panel>
-      </Section>
-
-      <DataTable
-        columns={columns}
-        rows={TRANSACTIONS}
-        searchPlaceholder="Search"
-        filters={[{ label: 'Status', options: [] }, { label: 'Type', options: [] }, { label: 'Date', options: [] }]}
-        pageSize={5}
-      />
-
-      {/* Financial Integrity Scanner — matches Financial Integrity Scanner.png */}
-      <Modal open={scanStep > 0} onClose={() => setScanStep(0)} title="Financial Integrity Scanner">
-        {scanStep === 1 && (
-          <div className="space-y-2.5">
-            {SCANS.map((s) => (
-              <button
-                key={s.name}
-                onClick={() => runScan(s.name)}
-                className="flex w-full items-center justify-between rounded-2xl bg-section px-5 py-4 text-left transition-colors hover:bg-mint-soft"
-              >
-                <span>
-                  <span className="block text-[13px] font-semibold text-ink">{s.name}</span>
-                  <span className="mt-0.5 block text-xs text-faint">{s.desc}</span>
-                </span>
-                <ChevronRight size={16} className="text-faint" />
-              </button>
-            ))}
-            <div className="flex gap-3 pt-3">
-              <Button variant="outline" className="flex-1" onClick={() => setScanStep(0)}>Cancel</Button>
-              <Button className="flex-1" onClick={() => runScan('Full Scan')}>Proceed</Button>
-            </div>
-          </div>
-        )}
-        {scanStep === 2 && (
-          <div className="flex flex-col items-center py-10">
-            <Spinner size="lg" />
-            <p className="mt-5 text-sm font-medium text-ink">Running {scanType}…</p>
-            <p className="mt-1 text-xs text-faint">Checking ledgers, balances and reconciliations</p>
-          </div>
-        )}
-        {scanStep === 3 && (
-          <div className="flex flex-col items-center py-6 text-center">
-            <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-mint-soft text-primary">
-              <Check size={26} strokeWidth={3} />
-            </span>
-            <h3 className="text-lg font-bold text-ink">{scanType} complete</h3>
-            <p className="mt-2 max-w-xs text-sm text-body">
-              No discrepancies found. All ledger entries reconcile with wallet, escrow and payout balances.
-            </p>
-            <Button className="mt-6 w-full" onClick={() => setScanStep(0)}>Done</Button>
-          </div>
-        )}
       </Modal>
     </div>
   );
