@@ -30,13 +30,30 @@ export type Area = {
 export type AreaDetail = Area & {
   stats: {
     reps: number;
+    activeReps: number;
     vendors: number;
     totalOrders: number;
     activeOrders: number;
+    completedOrders: number;
     revenueWP: number;
     revenueNaira: number;
   };
   recentOrders: Order[];
+};
+
+export type AreaRep = {
+  id: string; name: string; phone: string | null;
+  rating: number; ratingCount: number; status: string; isAvailable: boolean;
+  pickups: number; deliveries: number;
+};
+export type AreaVendor = {
+  id: string; name: string; phone: string | null;
+  rating: number; ratingCount: number; status: string; isAvailable: boolean;
+  orders: number; delivered: number;
+};
+export type AreaOrderRow = {
+  id: string; reference: string; customerName: string;
+  totalWP: number; status: string; createdAt: string;
 };
 
 export type RepUser = {
