@@ -2,18 +2,21 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, MapPin, Power, Plus, X, Star, Pencil } from 'lucide-react';
+import { ArrowLeft, MapPin, Power, Star, Pencil, X } from 'lucide-react';
+import { AreaMapEditor, DraftLocation } from '@/components/areas/AreaMapEditor';
 import { Chip } from '@/components/ui/Chip';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
-import { SelectField, Textarea } from '@/components/ui/Input';
+import { Input, SelectField, Textarea } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 import { DataTable, Column } from '@/components/ui/DataTable';
 import { api } from '@/lib/api';
 import { apiErr } from '@/lib/apiError';
 import { formatDate } from '@/lib/utils';
 import type { ApiResponse, Paginated } from '@/types';
-import type { AreaDetail, AreaRep, AreaVendor, AreaOrderRow } from '@/types/ops';
+import type { Area, AreaDetail, AreaRep, AreaVendor, AreaOrderRow } from '@/types/ops';
+
+const NG_STATES = ['Lagos', 'FCT', 'Rivers', 'Oyo', 'Kano'];
 
 const naira = (n: number) => `₦${Number(n || 0).toLocaleString()}`;
 const DEACTIVATE_CATEGORIES = ['Low demand', 'Operational issue', 'Merged with another area', 'Compliance', 'Other'];
@@ -51,7 +54,7 @@ export default function AreaDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const [newLoc, setNewLoc] = useState('');
+  const [draftLocs, setDraftLocs] = useState<DraftLocation[]>([]);
   const [addingLoc, setAddingLoc] = useState(false);
   const [locOpen, setLocOpen] = useState(false);
 
@@ -59,6 +62,14 @@ export default function AreaDetailPage() {
   const [category, setCategory] = useState(DEACTIVATE_CATEGORIES[0]);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
+
+  const [townsExpanded, setTownsExpanded] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({ name: '', state: 'Lagos', targetUsers: '', transportFeeWP: '', description: '' });
+  const [adjacentIds, setAdjacentIds] = useState<string[]>([]);
+  const [allAreas, setAllAreas] = useState<Area[]>([]);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState('');
 
   const load = useCallback(() => {
     setLoading(true);
@@ -80,16 +91,108 @@ export default function AreaDetailPage() {
 
   useEffect(load, [load]);
 
-  async function addLocation() {
-    const name = newLoc.trim();
-    if (!name) return;
+  function openLocEditor() {
+    setDraftLocs(
+      (area?.locations ?? []).map((l) => ({
+        id: l.id,
+        name: l.name,
+        centerLat: l.centerLat,
+        centerLng: l.centerLng,
+        radiusKm: l.radiusKm ?? 2,
+      })),
+    );
+    setLocOpen(true);
+  }
+
+  /** Diff-save the town drafts: POST new, PATCH changed, DELETE removed. */
+  async function saveLocations() {
+    if (!area) return;
     setAddingLoc(true);
-    try { await api.post(`/areas/${id}/locations`, { name }); setNewLoc(''); load(); }
-    catch (err) { setError(apiErr(err)); } finally { setAddingLoc(false); }
+    setError('');
+    try {
+      const existing = area.locations ?? [];
+      const keptIds = new Set(draftLocs.filter((d) => d.id).map((d) => d.id!));
+      const byId = new Map(existing.map((l) => [l.id, l]));
+
+      for (const l of existing) {
+        if (!keptIds.has(l.id)) await api.delete(`/areas/${id}/locations/${l.id}`);
+      }
+      for (const d of draftLocs) {
+        if (!d.id) {
+          await api.post(`/areas/${id}/locations`, {
+            name: d.name.trim(),
+            ...(d.centerLat != null && d.centerLng != null
+              ? { centerLat: d.centerLat, centerLng: d.centerLng, radiusKm: d.radiusKm }
+              : {}),
+          });
+        } else {
+          const prev = byId.get(d.id);
+          const changed =
+            prev &&
+            (prev.name !== d.name.trim() ||
+              prev.centerLat !== d.centerLat ||
+              prev.centerLng !== d.centerLng ||
+              (prev.radiusKm ?? 2) !== d.radiusKm);
+          if (changed) {
+            await api.patch(`/areas/${id}/locations/${d.id}`, {
+              name: d.name.trim(),
+              ...(d.centerLat != null && d.centerLng != null
+                ? { centerLat: d.centerLat, centerLng: d.centerLng, radiusKm: d.radiusKm }
+                : {}),
+            });
+          }
+        }
+      }
+      setLocOpen(false);
+      load();
+    } catch (err) {
+      setError(apiErr(err));
+    } finally {
+      setAddingLoc(false);
+    }
   }
-  async function removeLocation(locationId: string) {
-    try { await api.delete(`/areas/${id}/locations/${locationId}`); load(); } catch (err) { setError(apiErr(err)); }
+  function openEditor() {
+    if (!area) return;
+    setEditForm({
+      name: area.name,
+      state: area.state,
+      targetUsers: String(area.targetUsers ?? 0),
+      transportFeeWP: String(area.transportFeeWP ?? 0),
+      description: area.description ?? '',
+    });
+    setAdjacentIds(area.adjacentAreaIds ?? []);
+    setEditError('');
+    setEditOpen(true);
+    if (allAreas.length === 0) {
+      api
+        .get<Paginated<Area>>('/areas?limit=100')
+        .then((res) => setAllAreas(res.data.data.filter((a) => a.id !== id)))
+        .catch(() => setAllAreas([]));
+    }
   }
+
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    setEditError('');
+    setSavingEdit(true);
+    try {
+      await api.patch(`/areas/${id}`, {
+        name: editForm.name.trim(),
+        state: editForm.state.trim(),
+        targetUsers: Number(editForm.targetUsers || 0),
+        transportFeeWP: Number(editForm.transportFeeWP || 0),
+        description: editForm.description.trim() || undefined,
+        adjacentAreaIds: adjacentIds,
+      });
+      setEditOpen(false);
+      load();
+    } catch (err) {
+      setEditError(apiErr(err));
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   async function deactivate() {
     setBusy(true);
     try { await api.delete(`/areas/${id}`, { data: { category, reason: reason.trim() || undefined } }); setDeactivateOpen(false); setReason(''); load(); }
@@ -145,21 +248,31 @@ export default function AreaDetailPage() {
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               <Chip tone={area.isActive ? 'success' : 'neutral'}>{area.isActive ? 'Active' : 'Inactive'}</Chip>
-              {locs.slice(0, 4).map((l) => (
+              {(townsExpanded ? locs : locs.slice(0, 4)).map((l) => (
                 <span key={l.id} className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs text-white/80">{l.name}</span>
               ))}
-              {locs.length > 4 && <span className="text-xs text-white/50">+{locs.length - 4}</span>}
+              {locs.length > 4 && (
+                <button
+                  onClick={() => setTownsExpanded((x) => !x)}
+                  className="rounded-full border border-white/20 px-2.5 py-0.5 text-xs text-white/80 transition-colors hover:bg-white/10"
+                >
+                  {townsExpanded ? 'show less' : `+${locs.length - 4} more`}
+                </button>
+              )}
               <button
-                onClick={() => setLocOpen(true)}
+                onClick={openLocEditor}
                 className="inline-flex items-center gap-1 rounded-full border border-white/20 px-2.5 py-0.5 text-xs text-white/80 transition-colors hover:bg-white/10"
               >
                 <Pencil size={11} /> Edit towns
               </button>
             </div>
           </div>
-          {area.isActive
-            ? <Button variant="danger" onClick={() => setDeactivateOpen(true)}><Power size={15} /> Deactivate</Button>
-            : <Button variant="soft" loading={busy} onClick={reactivate}><Power size={15} /> Reactivate</Button>}
+          <div className="flex items-center gap-2">
+            <Button variant="soft" onClick={openEditor}><Pencil size={15} /> Edit area</Button>
+            {area.isActive
+              ? <Button variant="danger" onClick={() => setDeactivateOpen(true)}><Power size={15} /> Deactivate</Button>
+              : <Button variant="soft" loading={busy} onClick={reactivate}><Power size={15} /> Reactivate</Button>}
+          </div>
         </div>
 
         {/* 6-metric stat row */}
@@ -198,29 +311,81 @@ export default function AreaDetailPage() {
       {tab === 'Washermen' && <DataTable columns={vendorCols} rows={vendors} searchPlaceholder="Search washermen" pageSize={10} emptyText="No washermen serving this area yet." />}
       {tab === 'Orders' && <DataTable columns={orderCols} rows={orders} searchPlaceholder="Search by tracking ID" pageSize={10} emptyText="No orders in this area yet." />}
 
-      {/* Edit towns modal */}
-      <Modal open={locOpen} onClose={() => setLocOpen(false)} title={`Towns in ${area.name}`}>
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            {locs.map((l) => (
-              <span key={l.id} className="inline-flex items-center gap-1 rounded-full border border-line bg-section px-3 py-1.5 text-[13px] text-ink">
-                {l.name}
-                <button onClick={() => removeLocation(l.id)} className="text-faint hover:text-danger" aria-label={`Remove ${l.name}`}><X size={13} /></button>
-              </span>
-            ))}
-            {locs.length === 0 && <span className="text-sm text-faint">No towns yet.</span>}
-          </div>
-          <div className="flex items-center gap-2">
-            <input
-              value={newLoc} onChange={(e) => setNewLoc(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLocation(); } }}
-              placeholder="Type a town name and press enter"
-              className="h-10 flex-1 rounded-full bg-section px-4 text-sm text-ink placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-primary/40"
+      {/* Edit area modal — basics + broadcast-overflow adjacency */}
+      <Modal open={editOpen} onClose={() => setEditOpen(false)} title={`Edit ${area.name}`}>
+        <form className="space-y-4" onSubmit={saveEdit}>
+          <Input
+            label="Area Name" required
+            value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+          />
+          <SelectField
+            label="State" required value={editForm.state}
+            onChange={(e) => setEditForm((f) => ({ ...f, state: e.target.value }))}
+          >
+            {NG_STATES.map((st) => <option key={st} value={st}>{st}</option>)}
+          </SelectField>
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Target Users" type="number"
+              value={editForm.targetUsers} onChange={(e) => setEditForm((f) => ({ ...f, targetUsers: e.target.value }))}
             />
-            <Button size="sm" loading={addingLoc} onClick={addLocation}><Plus size={14} /> Add</Button>
+            <Input
+              label="Transport Fee (WP)" required type="number"
+              value={editForm.transportFeeWP} onChange={(e) => setEditForm((f) => ({ ...f, transportFeeWP: e.target.value }))}
+            />
           </div>
-          <div className="flex justify-end pt-1">
-            <Button variant="outline" onClick={() => setLocOpen(false)}>Done</Button>
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-ink">Adjacent areas (overflow order)</label>
+            <p className="mb-2 text-xs text-faint">
+              When no rep/vendor here responds, the broadcast spills into these areas in this exact order — closest first.
+            </p>
+            <div className="flex min-h-[2rem] flex-wrap items-center gap-1.5">
+              {adjacentIds.map((aid, i) => {
+                const a = allAreas.find((x) => x.id === aid);
+                return (
+                  <span key={aid} className="inline-flex items-center gap-1 rounded-full bg-mint-soft px-2.5 py-1 text-xs font-medium text-forest">
+                    {i + 1}. {a?.name ?? '…'}
+                    <button type="button" onClick={() => setAdjacentIds((ids) => ids.filter((x) => x !== aid))} className="text-forest/60 hover:text-forest">
+                      <X size={12} />
+                    </button>
+                  </span>
+                );
+              })}
+              {adjacentIds.length === 0 && <span className="text-xs text-faint">None yet — orders here never overflow.</span>}
+            </div>
+            <select
+              className="mt-2 h-10 w-full rounded-xl border border-line bg-white px-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary/30"
+              value=""
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v && !adjacentIds.includes(v)) setAdjacentIds((ids) => [...ids, v]);
+              }}
+            >
+              <option value="">Add adjacent area…</option>
+              {allAreas
+                .filter((a) => !adjacentIds.includes(a.id))
+                .map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          </div>
+          <Textarea
+            label="Description" placeholder="Optional notes about this area"
+            value={editForm.description} onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+          />
+          {editError && <p className="rounded-xl bg-danger-bg px-4 py-2 text-sm text-danger">{editError}</p>}
+          <div className="flex gap-3 pt-2">
+            <Button type="button" variant="outline" className="flex-1" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button type="submit" className="flex-1" loading={savingEdit}>Save changes</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit towns modal — map-based circle geofences */}
+      <Modal open={locOpen} onClose={() => setLocOpen(false)} title={`Towns & coverage in ${area.name}`} wide>
+        <div className="space-y-4">
+          <AreaMapEditor locations={draftLocs} onChange={setDraftLocs} height="20rem" />
+          <div className="flex justify-end gap-3 pt-1">
+            <Button variant="outline" onClick={() => setLocOpen(false)}>Cancel</Button>
+            <Button loading={addingLoc} onClick={saveLocations}>Save coverage</Button>
           </div>
         </div>
       </Modal>

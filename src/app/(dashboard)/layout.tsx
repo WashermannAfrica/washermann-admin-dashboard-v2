@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Topbar } from '@/components/layout/Topbar';
+import { IdleTimeout } from '@/components/layout/IdleTimeout';
 import { useAuthStore } from '@/store/auth.store';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -20,6 +21,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-screen overflow-hidden bg-page">
+      <IdleTimeout />
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar />

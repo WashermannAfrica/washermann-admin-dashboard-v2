@@ -8,7 +8,7 @@ import { Section, Panel } from '@/components/ui/Section';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input, SelectField, Textarea } from '@/components/ui/Input';
-import { TagInput } from '@/components/ui/TagInput';
+import { AreaMapEditor, DraftLocation } from '@/components/areas/AreaMapEditor';
 import { Chip } from '@/components/ui/Chip';
 import { Spinner } from '@/components/ui/Spinner';
 import { cn } from '@/lib/utils';
@@ -19,9 +19,15 @@ import type { Area } from '@/types/ops';
 const NG_STATES = ['Lagos', 'FCT', 'Rivers', 'Oyo', 'Kano'];
 
 function AreaCard({ area }: { area: Area }) {
+  const [expanded, setExpanded] = useState(false);
   const locs = area.locations ?? [];
-  const shown = locs.slice(0, 3);
-  const extra = locs.length - shown.length;
+  const shown = expanded ? locs : locs.slice(0, 3);
+  const extra = locs.length - 3;
+  const toggle = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setExpanded((x) => !x);
+  };
   return (
     <Link href={`/areas/${area.id}`} className="block">
       <Panel className="cursor-pointer transition-shadow hover:shadow-md">
@@ -36,7 +42,14 @@ function AreaCard({ area }: { area: Area }) {
           {shown.map((l) => (
             <span key={l.id} className="rounded-md border border-line px-2 py-0.5 text-[11px] text-body">{l.name}</span>
           ))}
-          {extra > 0 && <span className="rounded-md border border-line px-2 py-0.5 text-[11px] text-body">+{extra}</span>}
+          {extra > 0 && (
+            <button
+              onClick={toggle}
+              className="rounded-md border border-primary/40 bg-mint-soft px-2 py-0.5 text-[11px] font-medium text-forest hover:bg-primary/10"
+            >
+              {expanded ? 'show less' : `+${extra} more`}
+            </button>
+          )}
           {locs.length === 0 && <span className="text-[11px] text-faint">No locations yet</span>}
         </div>
         <div className="mt-4 flex items-center gap-4 border-t border-dashed border-line pt-3 text-xs text-faint">
@@ -59,8 +72,8 @@ export default function AreasPage() {
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [statusOpen, setStatusOpen] = useState(false);
 
-  const [form, setForm] = useState({ name: '', city: '', state: 'Lagos', targetUsers: '', transportFeeWP: '', description: '' });
-  const [towns, setTowns] = useState<string[]>([]);
+  const [form, setForm] = useState({ name: '', state: 'Lagos', targetUsers: '', transportFeeWP: '', description: '' });
+  const [draftLocs, setDraftLocs] = useState<DraftLocation[]>([]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -91,15 +104,19 @@ export default function AreasPage() {
       await api.post('/areas', {
         name: form.name.trim(),
         state: form.state.trim(),
-        lga: form.city.trim() || undefined,
         description: form.description.trim() || undefined,
         transportFeeWP: Number(form.transportFeeWP || 0),
         targetUsers: Number(form.targetUsers || 0),
-        locations: towns,
+        locations: draftLocs.map((l) => ({
+          name: l.name.trim(),
+          centerLat: l.centerLat,
+          centerLng: l.centerLng,
+          radiusKm: l.radiusKm,
+        })),
       });
       setAddOpen(false);
-      setForm({ name: '', city: '', state: 'Lagos', targetUsers: '', transportFeeWP: '', description: '' });
-      setTowns([]);
+      setForm({ name: '', state: 'Lagos', targetUsers: '', transportFeeWP: '', description: '' });
+      setDraftLocs([]);
       load();
     } catch (err) {
       const e2 = err as { response?: { data?: { message?: string | string[] } } };
@@ -111,9 +128,9 @@ export default function AreasPage() {
   }
 
   function exportCSV() {
-    const head = 'Name,State,City,Target Users,Locations,Transport Fee (WP),Status';
+    const head = 'Name,State,Target Users,Locations,Transport Fee (WP),Status';
     const body = filtered
-      .map((a) => `"${a.name}","${a.state}","${a.lga ?? ''}",${a.targetUsers},"${(a.locations ?? []).map((l) => l.name).join('; ')}",${a.transportFeeWP},"${a.isActive ? 'Active' : 'Inactive'}"`)
+      .map((a) => `"${a.name}","${a.state}",${a.targetUsers},"${(a.locations ?? []).map((l) => l.name).join('; ')}",${a.transportFeeWP},"${a.isActive ? 'Active' : 'Inactive'}"`)
       .join('\n');
     const blob = new Blob([head + '\n' + body], { type: 'text/csv' });
     const link = document.createElement('a');
@@ -196,15 +213,11 @@ export default function AreasPage() {
       </Section>
 
       {/* Add Area */}
-      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add Area">
+      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add Area" wide>
         <form className="space-y-4" onSubmit={addArea}>
           <Input
             label="Area Name" required placeholder="e.g. Lekki North"
             value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          />
-          <Input
-            label="City" placeholder="e.g. Eti-Osa"
-            value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
           />
           <SelectField
             label="State" required value={form.state}
@@ -216,10 +229,11 @@ export default function AreasPage() {
             label="Target Users" type="number" placeholder="500"
             value={form.targetUsers} onChange={(e) => setForm((f) => ({ ...f, targetUsers: e.target.value }))}
           />
-          <TagInput
-            label="Towns" value={towns} onChange={setTowns}
-            placeholder="Type town names and press enter"
-          />
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-ink">Towns & coverage</label>
+            <p className="mb-2 text-xs text-faint">Search each town to drop a pin, then size its radius — the circles together form this area&apos;s coverage region.</p>
+            <AreaMapEditor locations={draftLocs} onChange={setDraftLocs} height="18rem" />
+          </div>
           <Input
             label="Transport Fee (WP)" required type="number" placeholder="150"
             value={form.transportFeeWP} onChange={(e) => setForm((f) => ({ ...f, transportFeeWP: e.target.value }))}

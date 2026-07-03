@@ -4,6 +4,9 @@ export type AreaLocation = {
   id: string;
   areaId: string;
   name: string;
+  centerLat: number | null;
+  centerLng: number | null;
+  radiusKm: number | null;
   isActive: boolean;
   createdAt: string;
 };
