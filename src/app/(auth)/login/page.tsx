@@ -100,6 +100,12 @@ function LoginForm() {
         subtitle="Your control center for operations and payments"
       />
 
+      {searchParams.get('reason') === 'idle' && (
+        <p className="mt-6 rounded-xl bg-warn-bg px-4 py-2.5 text-sm text-warn">
+          You were signed out after a period of inactivity. Please log in again.
+        </p>
+      )}
+
       <form onSubmit={handleSubmit} className="mt-12 space-y-5">
         <Input
           label="Email"
