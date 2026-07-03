@@ -20,6 +20,7 @@ import {
   Gift,
   Shirt,
   Mail,
+  Newspaper,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -47,6 +48,7 @@ const MAIN: NavItem[] = [
   { label: 'Washer-points', href: '/washer-points', icon: <CircleDollarSign size={16} /> },
   { label: 'Admins & Staff', href: '/staff',        icon: <ShieldCheck size={16} /> },
   { label: 'Templates',     href: '/templates',     icon: <Mail size={16} /> },
+  { label: 'Blog',          href: '/blog',          icon: <Newspaper size={16} /> },
 ];
 
 const OTHERS: NavItem[] = [
