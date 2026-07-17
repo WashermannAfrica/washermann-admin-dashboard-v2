@@ -14,9 +14,14 @@ import type { LoginResponse } from '@/types';
 const ADMIN_ROLES = ['admin', 'finance', 'dispute_resolver'];
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000/api/v1';
 
-// Demo login — lets you explore the UI without the backend running.
-const DEMO_EMAIL = 'admin@washermann.com';
-const DEMO_PASSWORD = 'password';
+// Demo login — lets you explore the UI without the backend running. Available
+// ONLY on a developer's own machine (never on any deployed environment), and the
+// demo email is deliberately a non-real address so it can never shadow a real
+// admin account (which would plant fake tokens and cause a login → 401 → logout
+// loop). It stores placeholder tokens the real API will reject by design.
+const DEMO_LOGIN_ENABLED = process.env.NEXT_PUBLIC_APP_ENV === 'local';
+const DEMO_EMAIL = 'demo@washermann.local';
+const DEMO_PASSWORD = 'demo';
 
 // Wrap in Suspense because useSearchParams() requires it in Next.js 16
 export default function LoginPage() {
@@ -51,8 +56,8 @@ function LoginForm() {
     setError('');
     setLoading(true);
 
-    // Demo login bypass — works without the backend.
-    if (email.trim().toLowerCase() === DEMO_EMAIL && password === DEMO_PASSWORD) {
+    // Demo login bypass — local dev only, never on a deployed environment.
+    if (DEMO_LOGIN_ENABLED && email.trim().toLowerCase() === DEMO_EMAIL && password === DEMO_PASSWORD) {
       const demoUser = {
         id: 'demo-admin',
         fullName: 'Adaeze Okafor',
@@ -153,13 +158,15 @@ function LoginForm() {
           Login
         </Button>
 
-        <button
-          type="button"
-          onClick={() => { setEmail(DEMO_EMAIL); setPassword(DEMO_PASSWORD); }}
-          className="w-full rounded-xl bg-mint-soft px-4 py-3 text-center text-[13px] text-forest transition-colors hover:bg-[#d2f2e4]"
-        >
-          <span className="font-semibold">Demo access</span> — tap to fill: {DEMO_EMAIL} / {DEMO_PASSWORD}
-        </button>
+        {DEMO_LOGIN_ENABLED && (
+          <button
+            type="button"
+            onClick={() => { setEmail(DEMO_EMAIL); setPassword(DEMO_PASSWORD); }}
+            className="w-full rounded-xl bg-mint-soft px-4 py-3 text-center text-[13px] text-forest transition-colors hover:bg-[#d2f2e4]"
+          >
+            <span className="font-semibold">Demo access</span> — tap to fill: {DEMO_EMAIL} / {DEMO_PASSWORD}
+          </button>
+        )}
       </form>
 
       <p className="mt-8 text-center text-sm text-ink">
