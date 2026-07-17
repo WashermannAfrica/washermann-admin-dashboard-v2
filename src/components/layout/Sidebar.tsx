@@ -21,6 +21,7 @@ import {
   Shirt,
   Mail,
   Newspaper,
+  GraduationCap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -39,6 +40,7 @@ const MAIN: NavItem[] = [
   { label: 'Companies',     href: '/companies',     icon: <Building2 size={16} /> },
   { label: 'Areas',         href: '/areas',         icon: <MapPin size={16} /> },
   { label: 'Reps',          href: '/reps',          icon: <UserRound size={16} /> },
+  { label: 'Rep onboarding', href: '/rep-onboarding', icon: <GraduationCap size={16} /> },
   { label: 'Referrals',     href: '/referrals',     icon: <Gift size={16} /> },
   { label: 'Washerman',     href: '/washerman',     icon: <WashingMachine size={16} /> },
   { label: 'Catalogue',     href: '/catalogue',     icon: <Shirt size={16} /> },
