@@ -13,6 +13,12 @@ import { Spinner } from '@/components/ui/Spinner';
 import type { Paginated } from '@/types';
 import type { SalesRepApplication } from '@/types/ops';
 
+// Sales-rep portal base URL — the invite link we hand the accepted applicant
+// points here. Must be set per environment (local 3005 / staging / prod); the
+// fallback only covers a developer's own machine.
+const SALES_REP_PORTAL_URL =
+  process.env.NEXT_PUBLIC_SALES_REP_PORTAL_URL ?? 'http://localhost:3005';
+
 export function ApplicationsTab() {
   const [rows, setRows] = useState<SalesRepApplication[]>([]);
   const [loading, setLoading] = useState(true);
@@ -22,6 +28,32 @@ export function ApplicationsTab() {
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [invite, setInvite] = useState<{ name: string; link: string | null } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  // navigator.clipboard only exists in a secure context (https / localhost), so
+  // fall back to a hidden textarea + execCommand rather than silently doing
+  // nothing. Either way we flip to a "Copied" state so the click has feedback.
+  async function copyLink(text: string) {
+    if (!text) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError('Could not copy automatically — select the link and copy it manually.');
+    }
+  }
 
   const load = useCallback(() => {
     setLoading(true);
@@ -39,8 +71,7 @@ export function ApplicationsTab() {
     try {
       const res = await api.post<{ data: { inviteToken: string | null } }>(`/sales-rep/applications/${app.id}/accept`);
       const token = res.data.data?.inviteToken ?? null;
-      const base = 'http://localhost:3005';
-      setInvite({ name: app.fullName, link: token ? `${base}/invite?token=${token}` : null });
+      setInvite({ name: app.fullName, link: token ? `${SALES_REP_PORTAL_URL}/invite?token=${token}` : null });
       load();
     } catch (err) {
       setError(apiErr(err));
@@ -120,10 +151,15 @@ export function ApplicationsTab() {
               <div className="flex items-center gap-2">
                 <code className="flex-1 truncate text-xs text-ink">{invite.link}</code>
                 <button
-                  onClick={() => navigator.clipboard.writeText(invite.link ?? '')}
-                  className="rounded-lg bg-white p-1.5 text-body hover:text-ink"
+                  type="button"
+                  onClick={() => copyLink(invite.link ?? '')}
+                  title="Copy invite link"
+                  className={`flex shrink-0 items-center gap-1 rounded-lg bg-white px-2 py-1.5 text-xs transition-colors ${
+                    copied ? 'text-forest' : 'text-body hover:text-ink'
+                  }`}
                 >
-                  <Copy size={14} />
+                  {copied ? <Check size={14} /> : <Copy size={14} />}
+                  {copied ? 'Copied' : 'Copy'}
                 </button>
               </div>
             </div>
