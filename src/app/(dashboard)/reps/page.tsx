@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { UserRound, Plus, ArrowUpRight, TriangleAlert, Mail, ShieldCheck } from 'lucide-react';
+import { UserRound, Plus, ArrowUpRight, TriangleAlert, Mail, ShieldCheck, MapPin } from 'lucide-react';
 import { PageKpi, StatBlock } from '@/components/ui/PageKpi';
 import { DataTable, Column } from '@/components/ui/DataTable';
 import { Chip } from '@/components/ui/Chip';
@@ -26,6 +26,9 @@ export default function RepsPage() {
 
   const [addOpen, setAddOpen] = useState(false);
   const [suspending, setSuspending] = useState<Rep | null>(null);
+  const [assigning, setAssigning] = useState<Rep | null>(null);
+  const [assignAreaId, setAssignAreaId] = useState('');
+  const [assignSaving, setAssignSaving] = useState(false);
 
   const [form, setForm] = useState({ fullName: '', email: '', phone: '', areaId: '' });
   const [saving, setSaving] = useState(false);
@@ -87,6 +90,25 @@ export default function RepsPage() {
     }
   }
 
+  function openAssign(rep: Rep) {
+    setAssignAreaId(rep.areaIds[0] ?? '');
+    setAssigning(rep);
+  }
+
+  async function saveAssign() {
+    if (!assigning) return;
+    setAssignSaving(true);
+    try {
+      await api.patch(`/reps/${assigning.id}`, { areaIds: assignAreaId ? [assignAreaId] : [] });
+      setAssigning(null);
+      load();
+    } catch {
+      /* keep modal open on failure */
+    } finally {
+      setAssignSaving(false);
+    }
+  }
+
   async function clearFlag(rep: Rep) {
     try {
       await api.post(`/reps/${rep.id}/clear-flag`);
@@ -142,6 +164,7 @@ export default function RepsPage() {
         <RowMenu
           items={[
             { label: 'View Details', icon: <ArrowUpRight size={14} />, onClick: () => router.push(`/reps/${r.id}`) },
+            { label: 'Assign area', icon: <MapPin size={14} />, onClick: () => openAssign(r) },
             ...(r.flaggedForReview ? [{ label: 'Clear Flag', icon: <ShieldCheck size={14} />, onClick: () => clearFlag(r) }] : []),
             {
               label: r.status === 'suspended' ? 'Reactivate Rep' : 'Suspend Rep',
@@ -219,6 +242,20 @@ export default function RepsPage() {
             <Button type="submit" className="flex-1" loading={saving}>Add Rep</Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal open={!!assigning} onClose={() => setAssigning(null)} title={`Assign area — ${assigning?.user?.fullName ?? 'Rep'}`}>
+        <div className="space-y-4">
+          <p className="text-sm text-body">Set the service area this rep is broadcast orders for.</p>
+          <SelectField label="Area" value={assignAreaId} onChange={(e) => setAssignAreaId(e.target.value)}>
+            <option value="">No area</option>
+            {areas.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </SelectField>
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="outline" className="flex-1" onClick={() => setAssigning(null)}>Cancel</Button>
+            <Button type="button" className="flex-1" loading={assignSaving} onClick={saveAssign}>Save</Button>
+          </div>
+        </div>
       </Modal>
 
       <ConfirmModal
