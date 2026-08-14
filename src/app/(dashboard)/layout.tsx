@@ -10,14 +10,19 @@ import { useAuthStore } from '@/store/auth.store';
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const hasHydrated = useAuthStore((s) => s.hasHydrated);
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    // Only decide once the persisted session has been read — otherwise the very
+    // first render (isAuthenticated=false, pre-hydration) bounces to /login and
+    // flashes the login page before the real session loads.
+    if (hasHydrated && !isAuthenticated) {
       router.replace('/login');
     }
-  }, [isAuthenticated, router]);
+  }, [hasHydrated, isAuthenticated, router]);
 
-  if (!isAuthenticated) return null;
+  // Render nothing until hydrated (and while unauthenticated) — no login flash.
+  if (!hasHydrated || !isAuthenticated) return null;
 
   return (
     <div className="flex h-screen overflow-hidden bg-page">

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Check, X, ShieldCheck, FileText, Tags, Banknote, MessageSquareWarning, Star, ArrowUpRight, ChevronDown } from 'lucide-react';
+import { Check, X, ShieldCheck, FileText, Tags, Banknote, MessageSquareWarning, Star, ArrowUpRight, ChevronDown, RotateCcw } from 'lucide-react';
 import { EntityHero, HeroTabs } from '@/components/ui/EntityHero';
 import { Panel } from '@/components/ui/Section';
 import { Chip } from '@/components/ui/Chip';
@@ -56,6 +56,7 @@ export default function WashermanDetailPage() {
     });
 
   const [rejectingVendor, setRejectingVendor] = useState(false);
+  const [revertingVendor, setRevertingVendor] = useState(false);
   const [reason, setReason] = useState('');
   const [rejectTarget, setRejectTarget] = useState<{ p: VendorPricingProposal; item?: VendorPricingItem } | null>(null);
 
@@ -90,6 +91,7 @@ export default function WashermanDetailPage() {
   async function verifyVendor() { setBusy(true); try { await api.post(`/vendors/${id}/verify`, { decision: 'verified' }); load(); } catch (e) { setError(apiErr(e)); } finally { setBusy(false); } }
   async function rejectVendor() { setBusy(true); try { await api.post(`/vendors/${id}/verify`, { decision: 'rejected', rejectionReason: reason.trim() || undefined }); setRejectingVendor(false); setReason(''); load(); } catch (e) { setError(apiErr(e)); } finally { setBusy(false); } }
   async function suspendVendor() { setBusy(true); try { await api.post(`/vendors/${id}/suspend`); load(); } catch (e) { setError(apiErr(e)); } finally { setBusy(false); } }
+  async function revertVendor() { setBusy(true); try { await api.post(`/vendors/${id}/revert-to-pending`); setRevertingVendor(false); load(); } catch (e) { setError(apiErr(e)); } finally { setBusy(false); } }
   const replaceProposal = (u: VendorPricingProposal) => setPricing((prev) => prev.map((p) => (p.id === u.id ? u : p)));
 
   async function approveItem(p: VendorPricingProposal, it: VendorPricingItem) {
@@ -157,6 +159,9 @@ export default function WashermanDetailPage() {
             )}
             {(vs === 'suspended' || vs === 'rejected') && (
               <button onClick={verifyVendor} disabled={busy} className="flex h-9 items-center gap-2 rounded-full bg-primary px-4 text-xs font-semibold text-white hover:bg-primary-dark transition-colors"><ShieldCheck size={13} /> Reinstate</button>
+            )}
+            {vs === 'verified' && (
+              <button onClick={() => setRevertingVendor(true)} disabled={busy} className="flex h-9 items-center gap-2 rounded-full bg-white/10 px-4 text-xs font-semibold text-white hover:bg-white/20 transition-colors"><RotateCcw size={13} /> Revert to pending</button>
             )}
           </>
         }
@@ -342,6 +347,18 @@ export default function WashermanDetailPage() {
         <div className="space-y-4">
           <Textarea label="Reason" placeholder="Why is this vendor being rejected?" value={reason} onChange={(e) => setReason(e.target.value)} />
           <div className="flex gap-3"><Button variant="outline" className="flex-1" onClick={() => setRejectingVendor(false)}>Cancel</Button><Button variant="danger" className="flex-1" loading={busy} onClick={rejectVendor}>Reject vendor</Button></div>
+        </div>
+      </Modal>
+
+      {/* revert vendor to pending review */}
+      <Modal open={revertingVendor} onClose={() => setRevertingVendor(false)} title={`Revert ${vendor.user?.fullName ?? 'vendor'} to pending`}>
+        <div className="space-y-4">
+          <p className="text-sm text-body">
+            This undoes the verification: the vendor returns to <strong>pending review</strong>, is set unavailable,
+            and loses their vendor access until re-verified. They&apos;ll need to sign in again for the access change
+            to take effect. Use this only if they were verified by mistake.
+          </p>
+          <div className="flex gap-3"><Button variant="outline" className="flex-1" onClick={() => setRevertingVendor(false)}>Cancel</Button><Button variant="danger" className="flex-1" loading={busy} onClick={revertVendor}>Revert to pending</Button></div>
         </div>
       </Modal>
 
