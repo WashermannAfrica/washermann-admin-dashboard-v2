@@ -79,6 +79,10 @@ export type Rep = {
   flaggedForReview: boolean;
   flaggedAt: string | null;
   notes: string | null;
+  // Payout bank details — captured when the rep requests a referral payout.
+  bankCode: string | null;
+  accountNumber: string | null;
+  accountName: string | null;
   user?: RepUser;
   createdAt: string;
 }

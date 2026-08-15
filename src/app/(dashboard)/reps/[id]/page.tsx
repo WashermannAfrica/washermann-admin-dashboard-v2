@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { TriangleAlert } from 'lucide-react';
+import { TriangleAlert, Banknote } from 'lucide-react';
 import { EntityHero, HeroTabs } from '@/components/ui/EntityHero';
 import { DataTable, Column } from '@/components/ui/DataTable';
 import { Chip } from '@/components/ui/Chip';
@@ -102,6 +102,29 @@ export default function RepDetailPage() {
           { label: 'Total orders', value: String(orders.length) },
         ]}
       />
+
+      {/* Payout account — captured when the rep requests a referral payout */}
+      <div className="mt-4 rounded-2xl border border-line bg-white p-5">
+        <h2 className="flex items-center gap-2 text-sm font-bold text-ink"><Banknote size={16} /> Payout account</h2>
+        {rep.accountNumber ? (
+          <dl className="mt-3 grid gap-3 sm:grid-cols-3">
+            <div>
+              <dt className="text-xs text-faint">Account name</dt>
+              <dd className="text-sm font-medium text-ink">{rep.accountName ?? '—'}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-faint">Account number</dt>
+              <dd className="text-sm font-medium text-ink">{rep.accountNumber}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-faint">Bank code</dt>
+              <dd className="text-sm font-medium text-ink">{rep.bankCode ?? '—'}</dd>
+            </div>
+          </dl>
+        ) : (
+          <p className="mt-2 text-sm text-faint">No payout account yet — set when the rep first requests a payout.</p>
+        )}
+      </div>
 
       <HeroTabs tabs={['Orders']} active={tab} onChange={setTab} />
 
