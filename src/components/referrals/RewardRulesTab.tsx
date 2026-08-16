@@ -24,6 +24,10 @@ export function RewardRulesTab() {
   const [error, setError] = useState('');
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [savedKey, setSavedKey] = useState<string | null>(null);
+  const [fromV, setFromV] = useState('');
+  const [toV, setToV] = useState('');
+  const [reconciling, setReconciling] = useState(false);
+  const [reconResult, setReconResult] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -59,6 +63,31 @@ export function RewardRulesTab() {
       setError(apiErr(err));
     } finally {
       setSavingKey(null);
+    }
+  }
+
+  async function reconcile() {
+    const from = Number(fromV);
+    const to = Number(toV);
+    if (!fromV || !toV || Number.isNaN(from) || Number.isNaN(to)) {
+      setError('Enter both the current (from) and corrected (to) amounts.');
+      return;
+    }
+    if (!window.confirm(`Re-price every Rep/Sales-Rep referral currently at ₦${from} to ₦${to}? This includes already-paid records (it corrects the record, but does not reclaim money already sent).`)) return;
+    setReconciling(true);
+    setError('');
+    setReconResult(null);
+    try {
+      const res = await api.post<ApiResponse<{ matched: number; amountsCorrected: number; paidAffected: number }>>(
+        '/referrals/admin/reconcile-reward',
+        { fromValue: from, toValue: to },
+      );
+      const d = res.data.data;
+      setReconResult(`Updated ${d.matched} referral(s) — ${d.amountsCorrected} reward amount(s) corrected, ${d.paidAffected} were already paid.`);
+    } catch (err) {
+      setError(apiErr(err));
+    } finally {
+      setReconciling(false);
     }
   }
 
@@ -147,6 +176,36 @@ export function RewardRulesTab() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Bulk-correct referrals already frozen at an old amount */}
+      <div className="rounded-2xl border border-line bg-section/40 p-4">
+        <h3 className="text-sm font-bold text-ink">Fix existing referrals</h3>
+        <p className="mt-1 text-xs text-body">
+          Rule changes above only affect future referrals. Use this to re-price referrals already
+          frozen at an old amount (e.g. a mistakenly-set <span className="font-semibold">₦1000 → ₦500</span>).
+          Applies to Rep / Sales&nbsp;Rep referrers and <span className="font-semibold">includes already-paid</span> records.
+        </p>
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <label className="text-xs text-faint">
+            From ₦
+            <input
+              type="number" value={fromV} placeholder="1000"
+              onChange={(e) => setFromV(e.target.value)}
+              className="mt-1 block h-9 w-28 rounded-lg border border-line bg-white px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </label>
+          <label className="text-xs text-faint">
+            To ₦
+            <input
+              type="number" value={toV} placeholder="500"
+              onChange={(e) => setToV(e.target.value)}
+              className="mt-1 block h-9 w-28 rounded-lg border border-line bg-white px-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </label>
+          <Button variant="outline" loading={reconciling} onClick={reconcile}>Apply to existing</Button>
+        </div>
+        {reconResult && <p className="mt-2 text-sm font-medium text-primary">{reconResult}</p>}
       </div>
     </div>
   );
