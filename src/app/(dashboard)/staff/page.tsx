@@ -136,12 +136,10 @@ export default function StaffPage() {
 
       {error && <p className="rounded-xl bg-danger-bg px-4 py-2 text-sm text-danger">{error}</p>}
 
-      {loading ? (
-        <div className="flex justify-center py-16 text-primary"><Spinner size="lg" /></div>
-      ) : (
-        <DataTable
+      <DataTable
           columns={columns}
           rows={staff}
+          loading={loading}
           searchPlaceholder="Search staff"
           onSearch={(q) => { setSearch(q); setPage(1); }}
           serverPagination={{ page, pageSize: 20, total, onPageChange: setPage }}
@@ -156,7 +154,7 @@ export default function StaffPage() {
             </button>
           }
         />
-      )}
+
 
       {/* Invite */}
       <Modal open={inviteOpen} onClose={() => setInviteOpen(false)} title="Invite staff">

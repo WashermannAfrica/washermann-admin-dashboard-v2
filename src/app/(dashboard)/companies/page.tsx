@@ -92,14 +92,13 @@ export default function CompaniesPage() {
         <StatBlock label="Awaiting approval" value={String(awaiting)} hint="Need review" />
       </div>
 
-      {loading ? (
-        <div className="flex justify-center py-16 text-primary"><Spinner size="lg" /></div>
-      ) : error ? (
+      {error ? (
         <p className="py-12 text-center text-sm text-danger">{error}</p>
       ) : (
         <DataTable
           columns={columns}
           rows={companies}
+          loading={loading}
           searchPlaceholder="Search by name or owner"
           onSearch={(q) => { setSearch(q); setPage(1); }}
           serverPagination={{ page, pageSize: 20, total, onPageChange: setPage }}

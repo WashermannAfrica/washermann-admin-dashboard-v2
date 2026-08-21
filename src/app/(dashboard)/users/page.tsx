@@ -74,14 +74,13 @@ export default function UsersPage() {
         <StatBlock label="Loaded" value={String(users.length)} hint={`of ${total}`} />
       </div>
 
-      {loading ? (
-        <div className="flex justify-center py-16 text-primary"><Spinner size="lg" /></div>
-      ) : error ? (
+      {error ? (
         <p className="py-12 text-center text-sm text-danger">{error}</p>
       ) : (
         <DataTable
           columns={columns}
           rows={users}
+          loading={loading}
           searchPlaceholder="Search by name or contact"
           onSearch={(q) => { setSearch(q); setPage(1); }}
           serverPagination={{ page, pageSize: 20, total, onPageChange: setPage }}
