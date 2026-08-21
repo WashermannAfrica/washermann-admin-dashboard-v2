@@ -33,7 +33,7 @@ function Kpi({ icon, iconClass, label, value, sub }: { icon: React.ReactNode; ic
 
 const orderColumns: Column<Order>[] = [
   { key: 'reference', header: 'Reference', render: (o) => <span className="font-mono text-xs text-ink">{o.reference}</span> },
-  { key: 'customer', header: 'Customer', render: (o) => <span className="flex items-center gap-2.5 text-body"><Avatar name={o.customerId} size={26} /> {o.customerId.slice(0, 8)}…</span> },
+  { key: 'customer', header: 'Customer', render: (o) => <span className="flex items-center gap-2.5 text-body"><Avatar name={o.customerName ?? o.customerId} size={26} /> {o.customerName ?? `${o.customerId.slice(0, 8)}…`}</span> },
   { key: 'service', header: 'Service', value: (o) => o.serviceType, render: (o) => <span className="capitalize text-body">{o.serviceType.replace('_', ' & ')}</span> },
   { key: 'amount', header: 'Amount', value: (o) => o.totalWP, render: (o) => <span className="text-ink">{o.totalWP} WP <span className="text-xs text-faint">({naira(o.nairaEquivalentSnapshot)})</span></span> },
   { key: 'date', header: 'Date', sortable: true, value: (o) => o.createdAt, render: (o) => <span className="text-body">{formatDate(o.createdAt)}</span> },
