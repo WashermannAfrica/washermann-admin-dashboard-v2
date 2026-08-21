@@ -91,14 +91,13 @@ export default function OrdersPage() {
         <StatBlock label="Completed" value={String(completedCount)} hint="Settled" />
       </div>
 
-      {loading ? (
-        <div className="flex justify-center py-16 text-primary"><Spinner size="lg" /></div>
-      ) : error ? (
+      {error ? (
         <p className="py-12 text-center text-sm text-danger">{error}</p>
       ) : (
         <DataTable
           columns={columns}
           rows={orders}
+          loading={loading}
           searchPlaceholder="Search by reference"
           onSearch={(q) => { setSearch(q); setPage(1); }}
           serverPagination={{ page, pageSize: 20, total, onPageChange: setPage }}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Search, ChevronDown, Download, ArrowLeft, ArrowRight, ArrowDownUp, Check } from 'lucide-react';
+import { Search, ChevronDown, Download, ArrowLeft, ArrowRight, ArrowDownUp, Check, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Section, Panel } from './Section';
 
@@ -60,6 +60,11 @@ interface DataTableProps<T> {
   /** When set, filter pills are server-side: the parent refetches filtered.
    *  Provide explicit `options` on each filter def (data is only one page). */
   onFilter?: (label: string, value: string | null) => void;
+  /** Subtle in-place "updating" state for server refetches (search/sort/filter/
+   *  page). Keeps the toolbar + table mounted (and the search box focused);
+   *  just dims the rows and shows a small spinner. Use this instead of swapping
+   *  the whole table for a full-page spinner on every keystroke. */
+  loading?: boolean;
 }
 
 function FilterPill({
@@ -130,6 +135,7 @@ export function DataTable<T extends Record<string, unknown>>({
   serverPagination,
   onSort,
   onFilter,
+  loading = false,
 }: DataTableProps<T>) {
   const serverMode = !!serverPagination;
   const [q, setQ] = useState('');
@@ -247,8 +253,9 @@ export function DataTable<T extends Record<string, unknown>>({
             value={q}
             onChange={(e) => { setQ(e.target.value); setPage(1); }}
             placeholder={searchPlaceholder}
-            className="h-9 w-52 rounded-full border border-line bg-white pl-10 pr-4 text-[13px] placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="h-9 w-52 rounded-full border border-line bg-white pl-10 pr-9 text-[13px] placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
+          {loading && <Loader2 size={15} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-primary" />}
         </div>
         {filters.map((f) => (
           <FilterPill
@@ -274,7 +281,7 @@ export function DataTable<T extends Record<string, unknown>>({
 
       {/* table */}
       <Panel className="p-0 overflow-hidden">
-        <div className="overflow-x-auto p-3">
+        <div className={cn('overflow-x-auto p-3 transition-opacity', loading && 'pointer-events-none opacity-50')} aria-busy={loading}>
           <table className="w-full text-left text-[13px]">
             <thead>
               <tr className="bg-section">
@@ -300,7 +307,7 @@ export function DataTable<T extends Record<string, unknown>>({
             </thead>
             <tbody>
               {slice.length === 0 && (
-                <tr><td colSpan={columns.length} className="px-4 py-10 text-center text-faint">{emptyText}</td></tr>
+                <tr><td colSpan={columns.length} className="px-4 py-10 text-center text-faint">{loading ? 'Loading…' : emptyText}</td></tr>
               )}
               {slice.map((row, ri) => (
                 <tr key={ri} className="border-b border-line/70 last:border-0 hover:bg-page transition-colors">
