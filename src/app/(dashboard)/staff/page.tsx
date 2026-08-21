@@ -41,16 +41,21 @@ export default function StaffPage() {
 
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<{ by: string; dir: 'ASC' | 'DESC' } | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
-    const qs = search ? `&search=${encodeURIComponent(search)}` : '';
+    const params = new URLSearchParams({ page: String(page), limit: '20' });
+    if (search) params.set('search', search);
+    if (status) params.set('status', status);
+    if (sort) { params.set('sortBy', sort.by); params.set('sortDir', sort.dir); }
     api
-      .get<Paginated<StaffMember>>(`/admin/staff?page=${page}&limit=20${qs}`)
+      .get<Paginated<StaffMember>>(`/admin/staff?${params.toString()}`)
       .then((res) => { setStaff(res.data.data); setTotal(res.data.meta.total); })
       .catch((err) => setError(apiErr(err)))
       .finally(() => setLoading(false));
-  }, [search, page]);
+  }, [search, page, status, sort]);
 
   useEffect(load, [load]);
 
@@ -140,7 +145,9 @@ export default function StaffPage() {
           searchPlaceholder="Search staff"
           onSearch={(q) => { setSearch(q); setPage(1); }}
           serverPagination={{ page, pageSize: 20, total, onPageChange: setPage }}
-          filters={[{ label: 'Status', options: [] }]}
+          onSort={(by, dir) => { setSort({ by, dir: dir === 1 ? 'ASC' : 'DESC' }); setPage(1); }}
+          onFilter={(label, v) => { if (label === 'Status') { setStatus(v); setPage(1); } }}
+          filters={[{ label: 'Status', options: ['active', 'pending', 'suspended', 'deactivated'] }]}
           pageSize={10}
           emptyText="No staff yet."
           headerExtra={

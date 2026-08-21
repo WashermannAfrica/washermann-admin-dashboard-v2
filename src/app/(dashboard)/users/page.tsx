@@ -28,16 +28,21 @@ export default function UsersPage() {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<{ by: string; dir: 'ASC' | 'DESC' } | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
-    const qs = search ? `&search=${encodeURIComponent(search)}` : '';
+    const params = new URLSearchParams({ page: String(page), limit: '20' });
+    if (search) params.set('search', search);
+    if (status) params.set('status', status);
+    if (sort) { params.set('sortBy', sort.by); params.set('sortDir', sort.dir); }
     api
-      .get<Paginated<User>>(`/users?page=${page}&limit=20${qs}`)
+      .get<Paginated<User>>(`/users?${params.toString()}`)
       .then((res) => { setUsers(res.data.data); setTotal(res.data.meta.total); })
       .catch((err) => setError(apiErr(err)))
       .finally(() => setLoading(false));
-  }, [search, page]);
+  }, [search, page, status, sort]);
 
   const activeCount = users.filter((u) => u.status === 'active').length;
 
@@ -80,7 +85,9 @@ export default function UsersPage() {
           searchPlaceholder="Search by name or contact"
           onSearch={(q) => { setSearch(q); setPage(1); }}
           serverPagination={{ page, pageSize: 20, total, onPageChange: setPage }}
-          filters={[{ label: 'Status', options: [] }]}
+          onSort={(by, dir) => { setSort({ by, dir: dir === 1 ? 'ASC' : 'DESC' }); setPage(1); }}
+          onFilter={(label, v) => { if (label === 'Status') { setStatus(v); setPage(1); } }}
+          filters={[{ label: 'Status', options: ['active', 'pending', 'suspended', 'deactivated'] }]}
           pageSize={10}
           emptyText="No users yet."
         />
