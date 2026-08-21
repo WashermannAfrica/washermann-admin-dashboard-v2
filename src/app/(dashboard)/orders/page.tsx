@@ -1,17 +1,19 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { ShoppingBag, Check, X, Plus } from 'lucide-react';
-import { PageKpi, StatBlock } from '@/components/ui/PageKpi';
+import { ShoppingBag, Check, X, Plus, Clock, AlertTriangle } from 'lucide-react';
+import { StatBlock } from '@/components/ui/PageKpi';
+import { Section, Panel } from '@/components/ui/Section';
 import { DataTable, Column } from '@/components/ui/DataTable';
 import { Chip, statusTone } from '@/components/ui/Chip';
+import { LineChart } from '@/components/ui/LineChart';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { api } from '@/lib/api';
 import { apiErr } from '@/lib/apiError';
 import { formatDate, formatDateTime } from '@/lib/utils';
 import type { ApiResponse, Paginated } from '@/types';
-import type { Order, OrderTimelineEntry } from '@/types/ops';
+import type { AdminAnalytics, Order, OrderTimelineEntry } from '@/types/ops';
 
 const naira = (n: number | null) => `₦${Number(n ?? 0).toLocaleString()}`;
 const pretty = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -25,6 +27,8 @@ export default function OrdersPage() {
   const [selected, setSelected] = useState<Order | null>(null);
   const [timeline, setTimeline] = useState<OrderTimelineEntry[]>([]);
   const [busy, setBusy] = useState(false);
+
+  const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null);
 
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -47,6 +51,14 @@ export default function OrdersPage() {
   }, [search, page, status, service, sort]);
 
   useEffect(load, [load]);
+
+  // Analytics (chart + overdue/pending KPIs) — loaded once, independent of filters.
+  useEffect(() => {
+    api
+      .get<ApiResponse<AdminAnalytics>>('/admin/analytics')
+      .then((res) => setAnalytics(res.data.data))
+      .catch(() => setAnalytics(null));
+  }, []);
 
   // Load the status-history timeline whenever a drawer opens.
   useEffect(() => {
@@ -95,11 +107,48 @@ export default function OrdersPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <PageKpi icon={<ShoppingBag size={16} />} iconClass="bg-violet text-white" label="Total Orders" value={String(total)} />
+      {/* Orders-per-month chart + overdue/pending KPIs */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Section className="lg:col-span-2">
+          <Panel>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-violet text-white"><ShoppingBag size={16} /></span>
+                <div>
+                  <p className="text-sm font-semibold text-ink">Orders Per Month</p>
+                  <p className="text-xs text-faint">{total.toLocaleString()} total orders</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4">
+              <LineChart
+                rangeLabel={String(new Date().getFullYear())}
+                series={[{ name: 'Orders', color: '#9C74EC', fill: true, data: (analytics?.ordersPerMonth ?? []).map((m) => m.count) }]}
+                labels={(analytics?.ordersPerMonth ?? []).map((m) => m.month)}
+              />
+            </div>
+          </Panel>
+        </Section>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+          <div className="rounded-2xl bg-section px-5 py-4">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-warn text-white"><AlertTriangle size={16} /></span>
+            <p className="mt-3 text-[13px] text-body">Overdue Orders</p>
+            <p className="mt-1 text-3xl font-bold tracking-tight text-ink">{analytics ? analytics.overdueOrders.toLocaleString() : '—'}</p>
+            <p className="mt-1.5 text-xs text-faint">Past delivery deadline</p>
+          </div>
+          <div className="rounded-2xl bg-section px-5 py-4">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-info text-white"><Clock size={16} /></span>
+            <p className="mt-3 text-[13px] text-body">Pending Orders</p>
+            <p className="mt-1 text-3xl font-bold tracking-tight text-ink">{analytics ? analytics.pendingOrders.toLocaleString() : '—'}</p>
+            <p className="mt-1.5 text-xs text-faint">Awaiting pickup</p>
+          </div>
+        </div>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <StatBlock label="Active" value={String(activeCount)} hint="In progress" />
-        <StatBlock label="Completed" value={String(completedCount)} hint="Settled" />
+        <StatBlock label="Active" value={String(activeCount)} hint="On this page" />
+        <StatBlock label="Completed" value={String(completedCount)} hint="On this page" />
       </div>
 
       {error ? (

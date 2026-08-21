@@ -212,6 +212,16 @@ export type AdminOverview = {
   recentUsers: Array<{ id: string; fullName: string; email: string | null; phone: string | null; roles: string[]; status: string; createdAt: string }>;
 };
 
+export type AdminAnalytics = {
+  revenueNaira: number;
+  pendingPayouts: number;
+  counts: { orders: number; companies: number; contractWorkers: number; users: number; disputes: number };
+  overdueOrders: number;
+  pendingOrders: number;
+  ordersPerMonth: Array<{ month: string; count: number }>;
+  recentActivities: Array<{ id: string; reference: string | null; status: string; at: string }>;
+};
+
 export type OrderLineItem = { label: string; category?: string; qty?: number | null; unitPriceWP?: number | null; subtotalWP: number };
 
 export type Order = {
