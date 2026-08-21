@@ -41,12 +41,13 @@ export default function WashermanPage() {
   const [addError, setAddError] = useState('');
 
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
 
   const load = useCallback(() => {
     setLoading(true);
     const qs = search ? `&search=${encodeURIComponent(search)}` : '';
     Promise.all([
-      api.get<Paginated<Vendor>>(`/vendors?limit=100${qs}`),
+      api.get<Paginated<Vendor>>(`/vendors?page=${page}&limit=20${qs}`),
       api.get<{ data: AreaLite[] }>('/areas?limit=100').catch(() => ({ data: { data: [] } })),
     ])
       .then(([v, a]) => {
@@ -56,7 +57,7 @@ export default function WashermanPage() {
       })
       .catch((err) => setError(apiErr(err)))
       .finally(() => setLoading(false));
-  }, [search]);
+  }, [search, page]);
 
   useEffect(load, [load]);
 
@@ -190,7 +191,8 @@ export default function WashermanPage() {
           columns={columns}
           rows={vendors}
           searchPlaceholder="Search name, business or email"
-          onSearch={setSearch}
+          onSearch={(q) => { setSearch(q); setPage(1); }}
+          serverPagination={{ page, pageSize: 20, total, onPageChange: setPage }}
           filters={[{ label: 'Status', key: 'status' }]}
           exportName="washermen"
           headerExtra={<Button size="sm" onClick={() => setAddOpen(true)}><Plus size={14} /> Add Washerman</Button>}

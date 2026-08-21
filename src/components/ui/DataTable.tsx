@@ -41,6 +41,19 @@ interface DataTableProps<T> {
    * not hidden. Omit for the default fully client-side behaviour.
    */
   onSearch?: (q: string) => void;
+  /**
+   * When provided, pagination is SERVER-SIDE: `rows` is treated as the current
+   * page (rendered as-is, not client-sliced), and the footer drives
+   * `onPageChange` using the server's `total`/`page`/`pageSize`. Omit for the
+   * default client-side pagination over all `rows`.
+   * (Sort/filters still operate over the loaded page only.)
+   */
+  serverPagination?: {
+    page: number;
+    pageSize: number;
+    total: number;
+    onPageChange: (page: number) => void;
+  };
 }
 
 function FilterPill({
@@ -108,7 +121,9 @@ export function DataTable<T extends Record<string, unknown>>({
   bare = false,
   emptyText = 'Nothing here yet.',
   onSearch,
+  serverPagination,
 }: DataTableProps<T>) {
+  const serverMode = !!serverPagination;
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
 
@@ -176,9 +191,19 @@ export function DataTable<T extends Record<string, unknown>>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, q, sortKey, sortDir, active, filters, columns]);
 
-  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const current = Math.min(page, pages);
-  const slice = filtered.slice((current - 1) * pageSize, current * pageSize);
+  const pages = serverMode
+    ? Math.max(1, Math.ceil(serverPagination!.total / serverPagination!.pageSize))
+    : Math.max(1, Math.ceil(filtered.length / pageSize));
+  const current = serverMode ? serverPagination!.page : Math.min(page, pages);
+  // Server mode: rows are already the current page — render as-is (still
+  // client-sorted/filtered over that page). Client mode: slice locally.
+  const slice = serverMode ? filtered : filtered.slice((current - 1) * pageSize, current * pageSize);
+
+  function goTo(n: number) {
+    const clamped = Math.min(Math.max(1, n), pages);
+    if (serverMode) serverPagination!.onPageChange(clamped);
+    else setPage(clamped);
+  }
 
   function toggleSort(key: string) {
     if (sortKey === key) setSortDir((d) => (d === 1 ? -1 : 1));
@@ -279,7 +304,7 @@ export function DataTable<T extends Record<string, unknown>>({
         {/* pagination */}
         <div className="flex items-center justify-between border-t border-line px-4 py-3">
           <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            onClick={() => goTo(current - 1)}
             disabled={current === 1}
             className="flex items-center gap-1.5 text-[13px] text-body hover:text-ink disabled:opacity-40"
           >
@@ -292,7 +317,7 @@ export function DataTable<T extends Record<string, unknown>>({
               ) : (
                 <button
                   key={n}
-                  onClick={() => setPage(n as number)}
+                  onClick={() => goTo(n as number)}
                   className={cn(
                     'h-8 w-8 rounded-lg text-[13px] transition-colors',
                     n === current ? 'bg-mint-soft font-semibold text-forest' : 'text-body hover:bg-section',
@@ -304,7 +329,7 @@ export function DataTable<T extends Record<string, unknown>>({
             )}
           </div>
           <button
-            onClick={() => setPage((p) => Math.min(pages, p + 1))}
+            onClick={() => goTo(current + 1)}
             disabled={current === pages}
             className="flex items-center gap-1.5 text-[13px] text-body hover:text-ink disabled:opacity-40"
           >

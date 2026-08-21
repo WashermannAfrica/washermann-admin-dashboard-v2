@@ -36,16 +36,17 @@ export default function OrdersPage() {
   const [busy, setBusy] = useState(false);
 
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
 
   const load = useCallback(() => {
     setLoading(true);
     const qs = search ? `&search=${encodeURIComponent(search)}` : '';
     api
-      .get<Paginated<Order>>(`/orders?limit=100${qs}`)
+      .get<Paginated<Order>>(`/orders?page=${page}&limit=20${qs}`)
       .then((res) => { setOrders(res.data.data); setTotal(res.data.meta.total); })
       .catch((err) => setError(apiErr(err)))
       .finally(() => setLoading(false));
-  }, [search]);
+  }, [search, page]);
 
   useEffect(load, [load]);
 
@@ -92,7 +93,8 @@ export default function OrdersPage() {
           columns={columns}
           rows={orders}
           searchPlaceholder="Search by reference"
-          onSearch={setSearch}
+          onSearch={(q) => { setSearch(q); setPage(1); }}
+          serverPagination={{ page, pageSize: 20, total, onPageChange: setPage }}
           filters={[{ label: 'Status', options: [] }, { label: 'Service', options: [] }]}
           pageSize={10}
           emptyText="No orders yet."

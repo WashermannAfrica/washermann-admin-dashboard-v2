@@ -27,16 +27,17 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     setLoading(true);
     const qs = search ? `&search=${encodeURIComponent(search)}` : '';
     api
-      .get<Paginated<User>>(`/users?limit=100${qs}`)
+      .get<Paginated<User>>(`/users?page=${page}&limit=20${qs}`)
       .then((res) => { setUsers(res.data.data); setTotal(res.data.meta.total); })
       .catch((err) => setError(apiErr(err)))
       .finally(() => setLoading(false));
-  }, [search]);
+  }, [search, page]);
 
   const activeCount = users.filter((u) => u.status === 'active').length;
 
@@ -77,7 +78,8 @@ export default function UsersPage() {
           columns={columns}
           rows={users}
           searchPlaceholder="Search by name or contact"
-          onSearch={setSearch}
+          onSearch={(q) => { setSearch(q); setPage(1); }}
+          serverPagination={{ page, pageSize: 20, total, onPageChange: setPage }}
           filters={[{ label: 'Status', options: [] }]}
           pageSize={10}
           emptyText="No users yet."
