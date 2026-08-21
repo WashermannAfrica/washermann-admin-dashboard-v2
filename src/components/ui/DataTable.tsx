@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { Search, ChevronDown, Download, ArrowLeft, ArrowRight, ArrowDownUp, Check } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Search, ChevronDown, Download, ArrowLeft, ArrowRight, ArrowDownUp, Check, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Section, Panel } from './Section';
 
@@ -34,6 +34,37 @@ interface DataTableProps<T> {
   headerExtra?: React.ReactNode;
   bare?: boolean;
   emptyText?: string;
+  /**
+   * When provided, the search box drives SERVER-SIDE search: the value is
+   * debounced and passed to this callback (the parent refetches with it), and
+   * client-side text filtering is skipped so results beyond the loaded page are
+   * not hidden. Omit for the default fully client-side behaviour.
+   */
+  onSearch?: (q: string) => void;
+  /**
+   * When provided, pagination is SERVER-SIDE: `rows` is treated as the current
+   * page (rendered as-is, not client-sliced), and the footer drives
+   * `onPageChange` using the server's `total`/`page`/`pageSize`. Omit for the
+   * default client-side pagination over all `rows`.
+   * (Sort/filters still operate over the loaded page only.)
+   */
+  serverPagination?: {
+    page: number;
+    pageSize: number;
+    total: number;
+    onPageChange: (page: number) => void;
+  };
+  /** When set, column sorting is server-side: the parent refetches sorted.
+   *  `key` is the column key; `dir` is 1 (asc) or -1 (desc). */
+  onSort?: (key: string, dir: 1 | -1) => void;
+  /** When set, filter pills are server-side: the parent refetches filtered.
+   *  Provide explicit `options` on each filter def (data is only one page). */
+  onFilter?: (label: string, value: string | null) => void;
+  /** Subtle in-place "updating" state for server refetches (search/sort/filter/
+   *  page). Keeps the toolbar + table mounted (and the search box focused);
+   *  just dims the rows and shows a small spinner. Use this instead of swapping
+   *  the whole table for a full-page spinner on every keystroke. */
+  loading?: boolean;
 }
 
 function FilterPill({
@@ -100,9 +131,23 @@ export function DataTable<T extends Record<string, unknown>>({
   headerExtra,
   bare = false,
   emptyText = 'Nothing here yet.',
+  onSearch,
+  serverPagination,
+  onSort,
+  onFilter,
+  loading = false,
 }: DataTableProps<T>) {
+  const serverMode = !!serverPagination;
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
+
+  // Server-side search: debounce the input and hand it to the parent, which
+  // refetches. Client text-filtering is then skipped (see `filtered`).
+  useEffect(() => {
+    if (!onSearch) return;
+    const t = setTimeout(() => onSearch(q.trim()), 300);
+    return () => clearTimeout(t);
+  }, [q, onSearch]);
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<1 | -1>(1);
   const [active, setActive] = useState<Record<string, string | null>>({});
@@ -132,20 +177,26 @@ export function DataTable<T extends Record<string, unknown>>({
 
   const filtered = useMemo(() => {
     let out = rows;
-    if (q.trim()) {
+    // Client-side text filter — skipped in server-search mode (parent already
+    // filtered), so matches outside the loaded page aren't hidden.
+    if (!onSearch && q.trim()) {
       const needle = q.toLowerCase();
       out = out.filter((r) =>
         columns.some((c) => cellText(c, r).toLowerCase().includes(needle)),
       );
     }
-    for (const def of filters) {
-      const val = active[def.label];
-      if (!val) continue;
-      const c = colFor(def);
-      if (!c) continue;
-      out = out.filter((r) => cellText(c, r) === val);
+    // Client-side filters — skipped in server-filter mode.
+    if (!onFilter) {
+      for (const def of filters) {
+        const val = active[def.label];
+        if (!val) continue;
+        const c = colFor(def);
+        if (!c) continue;
+        out = out.filter((r) => cellText(c, r) === val);
+      }
     }
-    if (sortKey) {
+    // Client-side sort — skipped in server-sort mode.
+    if (!onSort && sortKey) {
       const col = columns.find((c) => c.key === sortKey);
       if (col) {
         out = [...out].sort((a, b) => {
@@ -158,13 +209,25 @@ export function DataTable<T extends Record<string, unknown>>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, q, sortKey, sortDir, active, filters, columns]);
 
-  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const current = Math.min(page, pages);
-  const slice = filtered.slice((current - 1) * pageSize, current * pageSize);
+  const pages = serverMode
+    ? Math.max(1, Math.ceil(serverPagination!.total / serverPagination!.pageSize))
+    : Math.max(1, Math.ceil(filtered.length / pageSize));
+  const current = serverMode ? serverPagination!.page : Math.min(page, pages);
+  // Server mode: rows are already the current page — render as-is (still
+  // client-sorted/filtered over that page). Client mode: slice locally.
+  const slice = serverMode ? filtered : filtered.slice((current - 1) * pageSize, current * pageSize);
+
+  function goTo(n: number) {
+    const clamped = Math.min(Math.max(1, n), pages);
+    if (serverMode) serverPagination!.onPageChange(clamped);
+    else setPage(clamped);
+  }
 
   function toggleSort(key: string) {
-    if (sortKey === key) setSortDir((d) => (d === 1 ? -1 : 1));
-    else { setSortKey(key); setSortDir(1); }
+    const nextDir: 1 | -1 = sortKey === key && sortDir === 1 ? -1 : 1;
+    setSortKey(key);
+    setSortDir(nextDir);
+    onSort?.(key, nextDir);
   }
 
   function exportCSV() {
@@ -190,8 +253,9 @@ export function DataTable<T extends Record<string, unknown>>({
             value={q}
             onChange={(e) => { setQ(e.target.value); setPage(1); }}
             placeholder={searchPlaceholder}
-            className="h-9 w-52 rounded-full border border-line bg-white pl-10 pr-4 text-[13px] placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="h-9 w-52 rounded-full border border-line bg-white pl-10 pr-9 text-[13px] placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
+          {loading && <Loader2 size={15} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-primary" />}
         </div>
         {filters.map((f) => (
           <FilterPill
@@ -199,7 +263,7 @@ export function DataTable<T extends Record<string, unknown>>({
             def={f}
             active={active[f.label] ?? null}
             options={filterOptions[f.label] ?? []}
-            onSelect={(v) => { setActive((a) => ({ ...a, [f.label]: v })); setPage(1); }}
+            onSelect={(v) => { setActive((a) => ({ ...a, [f.label]: v })); setPage(1); onFilter?.(f.label, v); }}
           />
         ))}
         <div className="ml-auto flex items-center gap-2">
@@ -217,7 +281,7 @@ export function DataTable<T extends Record<string, unknown>>({
 
       {/* table */}
       <Panel className="p-0 overflow-hidden">
-        <div className="overflow-x-auto p-3">
+        <div className={cn('overflow-x-auto p-3 transition-opacity', loading && 'pointer-events-none opacity-50')} aria-busy={loading}>
           <table className="w-full text-left text-[13px]">
             <thead>
               <tr className="bg-section">
@@ -243,7 +307,7 @@ export function DataTable<T extends Record<string, unknown>>({
             </thead>
             <tbody>
               {slice.length === 0 && (
-                <tr><td colSpan={columns.length} className="px-4 py-10 text-center text-faint">{emptyText}</td></tr>
+                <tr><td colSpan={columns.length} className="px-4 py-10 text-center text-faint">{loading ? 'Loading…' : emptyText}</td></tr>
               )}
               {slice.map((row, ri) => (
                 <tr key={ri} className="border-b border-line/70 last:border-0 hover:bg-page transition-colors">
@@ -261,7 +325,7 @@ export function DataTable<T extends Record<string, unknown>>({
         {/* pagination */}
         <div className="flex items-center justify-between border-t border-line px-4 py-3">
           <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            onClick={() => goTo(current - 1)}
             disabled={current === 1}
             className="flex items-center gap-1.5 text-[13px] text-body hover:text-ink disabled:opacity-40"
           >
@@ -274,7 +338,7 @@ export function DataTable<T extends Record<string, unknown>>({
               ) : (
                 <button
                   key={n}
-                  onClick={() => setPage(n as number)}
+                  onClick={() => goTo(n as number)}
                   className={cn(
                     'h-8 w-8 rounded-lg text-[13px] transition-colors',
                     n === current ? 'bg-mint-soft font-semibold text-forest' : 'text-body hover:bg-section',
@@ -286,7 +350,7 @@ export function DataTable<T extends Record<string, unknown>>({
             )}
           </div>
           <button
-            onClick={() => setPage((p) => Math.min(pages, p + 1))}
+            onClick={() => goTo(current + 1)}
             disabled={current === pages}
             className="flex items-center gap-1.5 text-[13px] text-body hover:text-ink disabled:opacity-40"
           >

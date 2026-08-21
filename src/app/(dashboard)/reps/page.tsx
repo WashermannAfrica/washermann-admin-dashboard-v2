@@ -39,19 +39,30 @@ export default function RepsPage() {
     [areas],
   );
 
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [sort, setSort] = useState<{ by: string; dir: 'ASC' | 'DESC' } | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+
   const load = useCallback(() => {
     setLoading(true);
+    const params = new URLSearchParams({ page: String(page), limit: '20' });
+    if (search) params.set('search', search);
+    if (status) params.set('status', status);
+    if (sort) { params.set('sortBy', sort.by); params.set('sortDir', sort.dir); }
     Promise.all([
-      api.get<Paginated<Rep>>('/reps?limit=100'),
+      api.get<Paginated<Rep>>(`/reps?${params.toString()}`),
       api.get<Paginated<Area>>('/areas?limit=100'),
     ])
       .then(([r, a]) => {
         setReps(r.data.data);
+        setTotal(r.data.meta.total);
         setAreas(a.data.data);
       })
       .catch((err) => setError(err?.response?.data?.message ?? 'Failed to load reps.'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [search, page, status, sort]);
 
   useEffect(load, [load]);
 
@@ -192,16 +203,19 @@ export default function RepsPage() {
         <StatBlock label="Flagged for review" value={String(flaggedCount)} hint="Low rating" />
       </div>
 
-      {loading ? (
-        <div className="flex justify-center py-16 text-primary"><Spinner size="lg" /></div>
-      ) : error ? (
+      {error ? (
         <p className="py-12 text-center text-sm text-danger">{error}</p>
       ) : (
         <DataTable
           columns={columns}
           rows={reps}
+          loading={loading}
           searchPlaceholder="Search by name, email or phone"
-          filters={[{ label: 'Status', options: [] }]}
+          onSearch={(q) => { setSearch(q); setPage(1); }}
+          serverPagination={{ page, pageSize: 20, total, onPageChange: setPage }}
+          onSort={(by, dir) => { setSort({ by, dir: dir === 1 ? 'ASC' : 'DESC' }); setPage(1); }}
+          onFilter={(label, v) => { if (label === 'Status') { setStatus(v); setPage(1); } }}
+          filters={[{ label: 'Status', options: ['active', 'inactive', 'suspended'] }]}
           pageSize={10}
           emptyText="No reps yet. Add your first rep to get started."
           headerExtra={
