@@ -24,14 +24,25 @@ export default function CompaniesPage() {
   const [toggling, setToggling] = useState<Company | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<{ by: string; dir: 'ASC' | 'DESC' } | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [activation, setActivation] = useState<string | null>(null);
+
   const load = useCallback(() => {
     setLoading(true);
+    const params = new URLSearchParams({ page: String(page), limit: '20' });
+    if (search) params.set('search', search);
+    if (status) params.set('status', status);
+    if (activation) params.set('activationStatus', activation);
+    if (sort) { params.set('sortBy', sort.by); params.set('sortDir', sort.dir); }
     api
-      .get<Paginated<Company>>('/companies?limit=100')
+      .get<Paginated<Company>>(`/companies?${params.toString()}`)
       .then((res) => { setCompanies(res.data.data); setTotal(res.data.meta.total); })
       .catch((err) => setError(apiErr(err)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [search, page, status, activation, sort]);
 
   useEffect(load, [load]);
 
@@ -81,16 +92,26 @@ export default function CompaniesPage() {
         <StatBlock label="Awaiting approval" value={String(awaiting)} hint="Need review" />
       </div>
 
-      {loading ? (
-        <div className="flex justify-center py-16 text-primary"><Spinner size="lg" /></div>
-      ) : error ? (
+      {error ? (
         <p className="py-12 text-center text-sm text-danger">{error}</p>
       ) : (
         <DataTable
           columns={columns}
           rows={companies}
+          loading={loading}
           searchPlaceholder="Search by name or owner"
-          filters={[{ label: 'Status', options: [] }, { label: 'Activation', options: [] }]}
+          onSearch={(q) => { setSearch(q); setPage(1); }}
+          serverPagination={{ page, pageSize: 20, total, onPageChange: setPage }}
+          onSort={(by, dir) => { setSort({ by, dir: dir === 1 ? 'ASC' : 'DESC' }); setPage(1); }}
+          onFilter={(label, v) => {
+            if (label === 'Status') setStatus(v);
+            if (label === 'Activation') setActivation(v);
+            setPage(1);
+          }}
+          filters={[
+            { label: 'Status', options: ['active', 'inactive'] },
+            { label: 'Activation', options: ['pending', 'awaiting_approval', 'active'] },
+          ]}
           pageSize={10}
           emptyText="No companies yet."
         />

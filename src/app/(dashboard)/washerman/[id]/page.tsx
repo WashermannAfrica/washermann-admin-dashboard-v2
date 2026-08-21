@@ -18,7 +18,7 @@ import { api } from '@/lib/api';
 import { apiErr } from '@/lib/apiError';
 import { formatDate } from '@/lib/utils';
 import type { ApiResponse, Paginated } from '@/types';
-import type { Vendor, VendorDocument, VendorPricingProposal, VendorPricingItem, PriceItemStatus, VendorWallet, VendorPayout, Order } from '@/types/ops';
+import type { Vendor, VendorDocument, VendorPricingProposal, VendorPricingItem, PriceItemStatus, VendorWallet, VendorPayout, Order, Area } from '@/types/ops';
 
 const naira = (n: number) => `₦${Number(n || 0).toLocaleString()}`;
 const wp = (n?: number) => `${Number(n ?? 0).toLocaleString()} WP`;
@@ -60,6 +60,8 @@ export default function WashermanDetailPage() {
   const [reason, setReason] = useState('');
   const [rejectTarget, setRejectTarget] = useState<{ p: VendorPricingProposal; item?: VendorPricingItem } | null>(null);
 
+  const [areas, setAreas] = useState<Area[]>([]);
+
   const load = useCallback(() => {
     setLoading(true);
     Promise.all([
@@ -69,9 +71,11 @@ export default function WashermanDetailPage() {
       api.get<Paginated<Order>>(`/orders?vendorId=${id}&limit=50`).catch(() => ({ data: { data: [] } })),
       api.get<Paginated<VendorPayout>>(`/payouts?vendorId=${id}&limit=50`).catch(() => ({ data: { data: [] } })),
       api.get<ApiResponse<VendorWallet>>(`/vendors/${id}/wallet`).catch(() => ({ data: { data: null } })),
+      api.get<Paginated<Area>>(`/areas?limit=200`).catch(() => ({ data: { data: [] } })),
     ])
-      .then(([v, d, p, o, py, w]) => {
+      .then(([v, d, p, o, py, w, a]) => {
         setVendor(v.data.data);
+        setAreas(Array.isArray((a.data as Paginated<Area>).data) ? (a.data as Paginated<Area>).data : []);
         setDocs(Array.isArray(d.data.data) ? d.data.data : []);
         const proposals = Array.isArray(p.data.data) ? p.data.data : [];
         setPricing(proposals);
@@ -130,6 +134,9 @@ export default function WashermanDetailPage() {
   const vs = vendor.verificationStatus;
   const kycVerified = docs.length > 0 && vs === 'verified';
   const pendingPayouts = payouts.filter((p) => !['completed', 'paid', 'rejected', 'failed', 'cancelled'].includes(p.status.toLowerCase()));
+  const vendorAreas = vendor.areaIds
+    .map((aid) => areas.find((a) => a.id === aid))
+    .filter((a): a is Area => Boolean(a));
 
   const orderCols: Column<Order>[] = [
     { key: 'ref', header: 'Reference', render: (o) => <span className="font-mono text-xs text-ink">{o.reference}</span> },
@@ -180,6 +187,25 @@ export default function WashermanDetailPage() {
       />
 
       {error && <p className="mt-4 rounded-xl bg-danger-bg px-4 py-2 text-sm text-danger">{error}</p>}
+
+      {/* Areas the vendor is affiliated to */}
+      <div className="mt-4 rounded-2xl border border-line bg-white p-5">
+        <h2 className="text-sm font-bold text-ink">Areas served ({vendor.areaIds.length})</h2>
+        {vendorAreas.length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {vendorAreas.map((a) => (
+              <span key={a.id} className="rounded-full border border-line bg-section px-3 py-1 text-xs font-medium text-ink">
+                {a.name}
+                {a.state ? <span className="text-faint"> · {a.state}</span> : null}
+              </span>
+            ))}
+          </div>
+        ) : vendor.areaIds.length > 0 ? (
+          <p className="mt-2 text-sm text-faint">{vendor.areaIds.length} area(s) assigned — names could not be resolved.</p>
+        ) : (
+          <p className="mt-2 text-sm text-faint">No areas assigned yet.</p>
+        )}
+      </div>
 
       <HeroTabs tabs={TABS} active={tab} onChange={setTab} />
 

@@ -40,10 +40,19 @@ export default function WashermanPage() {
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState('');
 
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<{ by: string; dir: 'ASC' | 'DESC' } | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+
   const load = useCallback(() => {
     setLoading(true);
+    const params = new URLSearchParams({ page: String(page), limit: '20' });
+    if (search) params.set('search', search);
+    if (status) params.set('verificationStatus', status);
+    if (sort) { params.set('sortBy', sort.by); params.set('sortDir', sort.dir); }
     Promise.all([
-      api.get<Paginated<Vendor>>('/vendors?limit=100'),
+      api.get<Paginated<Vendor>>(`/vendors?${params.toString()}`),
       api.get<{ data: AreaLite[] }>('/areas?limit=100').catch(() => ({ data: { data: [] } })),
     ])
       .then(([v, a]) => {
@@ -53,7 +62,7 @@ export default function WashermanPage() {
       })
       .catch((err) => setError(apiErr(err)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [search, page, status, sort]);
 
   useEffect(load, [load]);
 
@@ -180,20 +189,21 @@ export default function WashermanPage() {
 
       {error && <p className="rounded-xl bg-danger-bg px-4 py-2 text-sm text-danger">{error}</p>}
 
-      {loading ? (
-        <div className="flex justify-center py-16 text-primary"><Spinner size="lg" /></div>
-      ) : (
-        <DataTable
-          columns={columns}
-          rows={vendors}
-          searchPlaceholder="Search"
-          filters={[{ label: 'Status', key: 'status' }]}
-          exportName="washermen"
-          headerExtra={<Button size="sm" onClick={() => setAddOpen(true)}><Plus size={14} /> Add Washerman</Button>}
-          pageSize={10}
-          emptyText="No vendors yet."
-        />
-      )}
+      <DataTable
+        columns={columns}
+        rows={vendors}
+        loading={loading}
+        searchPlaceholder="Search name, business or email"
+        onSearch={(q) => { setSearch(q); setPage(1); }}
+        serverPagination={{ page, pageSize: 20, total, onPageChange: setPage }}
+        onSort={(by, dir) => { setSort({ by, dir: dir === 1 ? 'ASC' : 'DESC' }); setPage(1); }}
+        onFilter={(label, v) => { if (label === 'Status') { setStatus(v); setPage(1); } }}
+        filters={[{ label: 'Status', options: ['pending_review', 'verified', 'rejected', 'suspended'] }]}
+        exportName="washermen"
+        headerExtra={<Button size="sm" onClick={() => setAddOpen(true)}><Plus size={14} /> Add Washerman</Button>}
+        pageSize={10}
+        emptyText="No vendors yet."
+      />
 
       {/* Add Washerman */}
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add Washerman">

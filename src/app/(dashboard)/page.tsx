@@ -2,112 +2,118 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Users as UsersIcon, Building2, CircleDollarSign, ShoppingBag } from 'lucide-react';
+import { Users as UsersIcon, Building2, ShoppingBag, HardHat, AlertTriangle } from 'lucide-react';
 import { Section, Panel } from '@/components/ui/Section';
-import { DataTable, Column } from '@/components/ui/DataTable';
-import { Chip } from '@/components/ui/Chip';
-import { Avatar } from '@/components/ui/Avatar';
+import { Chip, statusTone } from '@/components/ui/Chip';
+import { LineChart } from '@/components/ui/LineChart';
 import { Spinner } from '@/components/ui/Spinner';
 import { api } from '@/lib/api';
 import { apiErr } from '@/lib/apiError';
-import { formatDate } from '@/lib/utils';
-import type { ApiResponse, Paginated } from '@/types';
-import type { AdminOverview, Order } from '@/types/ops';
+import { formatDateTime } from '@/lib/utils';
+import type { ApiResponse } from '@/types';
+import type { AdminAnalytics } from '@/types/ops';
 
 const naira = (n: number | null) => `₦${Number(n ?? 0).toLocaleString()}`;
+const pretty = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
-function Kpi({ icon, iconClass, label, value, sub }: { icon: React.ReactNode; iconClass: string; label: string; value: string; sub?: string }) {
+/** One cell in the 5-stat row: coloured icon chip, number, label. */
+function Stat({ icon, iconClass, label, value }: { icon: React.ReactNode; iconClass: string; label: string; value: string }) {
   return (
-    <Panel>
-      <div className="flex items-center gap-3">
-        <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${iconClass}`}>{icon}</span>
-        <div>
-          <p className="text-xs text-faint">{label}</p>
-          <p className="text-2xl font-bold text-ink">{value}</p>
-        </div>
+    <div className="flex items-center gap-3">
+      <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${iconClass}`}>{icon}</span>
+      <div className="min-w-0">
+        <p className="text-2xl font-bold leading-tight text-ink">{value}</p>
+        <p className="truncate text-xs text-faint">{label}</p>
       </div>
-      {sub && <p className="mt-2 text-xs text-body">{sub}</p>}
-    </Panel>
+    </div>
   );
 }
 
-const orderColumns: Column<Order>[] = [
-  { key: 'reference', header: 'Reference', render: (o) => <span className="font-mono text-xs text-ink">{o.reference}</span> },
-  { key: 'customer', header: 'Customer', render: (o) => <span className="flex items-center gap-2.5 text-body"><Avatar name={o.customerId} size={26} /> {o.customerId.slice(0, 8)}…</span> },
-  { key: 'service', header: 'Service', value: (o) => o.serviceType, render: (o) => <span className="capitalize text-body">{o.serviceType.replace('_', ' & ')}</span> },
-  { key: 'amount', header: 'Amount', value: (o) => o.totalWP, render: (o) => <span className="text-ink">{o.totalWP} WP <span className="text-xs text-faint">({naira(o.nairaEquivalentSnapshot)})</span></span> },
-  { key: 'date', header: 'Date', sortable: true, value: (o) => o.createdAt, render: (o) => <span className="text-body">{formatDate(o.createdAt)}</span> },
-  { key: 'status', header: 'Status', sortable: true, value: (o) => o.status, render: (o) => <Chip>{o.status.replace(/_/g, ' ')}</Chip> },
-  { key: 'view', header: '', render: () => <Link href="/orders" className="font-medium text-ink underline-offset-2 hover:underline">View</Link> },
-];
-
 export default function DashboardPage() {
-  const [overview, setOverview] = useState<AdminOverview | null>(null);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [orderTotal, setOrderTotal] = useState(0);
+  const [data, setData] = useState<AdminAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    Promise.all([
-      api.get<ApiResponse<AdminOverview>>('/admin/overview'),
-      api.get<Paginated<Order>>('/orders?limit=8'),
-    ])
-      .then(([o, ord]) => {
-        setOverview(o.data.data);
-        setOrders(ord.data.data);
-        setOrderTotal(ord.data.meta.total);
-      })
+    api
+      .get<ApiResponse<AdminAnalytics>>('/admin/analytics')
+      .then((res) => setData(res.data.data))
       .catch((err) => setError(apiErr(err)))
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <div className="flex justify-center py-24 text-primary"><Spinner size="lg" /></div>;
   if (error) return <p className="py-12 text-center text-sm text-danger">{error}</p>;
-  if (!overview) return null;
+  if (!data) return null;
+
+  const c = data.counts;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Kpi icon={<UsersIcon size={18} />} iconClass="bg-[#E5177E] text-white" label="Total Users" value={String(overview.users.total)} sub={`${overview.users.active} active · ${overview.users.newThisWeek} new this week`} />
-        <Kpi icon={<ShoppingBag size={18} />} iconClass="bg-violet text-white" label="Total Orders" value={String(orderTotal)} sub="All time" />
-        <Kpi icon={<Building2 size={18} />} iconClass="bg-info text-white" label="Companies" value={String(overview.companies.total)} sub={`${overview.companies.awaitingApproval} awaiting approval`} />
-        <Kpi icon={<CircleDollarSign size={18} />} iconClass="bg-primary text-white" label="WP in circulation" value={overview.washPoints.inCirculation.toLocaleString()} sub={`${overview.washPoints.userHeld.toLocaleString()} user · ${overview.washPoints.companyHeld.toLocaleString()} company`} />
-      </div>
+      {/* Revenue hero */}
+      <Section>
+        <Panel className="p-6 sm:p-7">
+          <p className="text-[13px] text-body">Total Revenue</p>
+          <p className="mt-1 text-5xl font-bold tracking-tight text-ink">{naira(data.revenueNaira)}</p>
+          <p className="mt-2 text-xs text-faint">Gross order value across the platform (all time)</p>
+        </Panel>
+      </Section>
 
-      {/* Recent signups */}
+      {/* 5-stat row */}
       <Section>
         <Panel>
-          <p className="text-sm font-semibold text-ink">Recent signups</p>
+          <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-5">
+            <Stat icon={<ShoppingBag size={18} />} iconClass="bg-violet text-white" label="Total Orders" value={c.orders.toLocaleString()} />
+            <Stat icon={<Building2 size={18} />} iconClass="bg-info text-white" label="Companies" value={c.companies.toLocaleString()} />
+            <Stat icon={<HardHat size={18} />} iconClass="bg-primary text-white" label="Contract Workers" value={c.contractWorkers.toLocaleString()} />
+            <Stat icon={<UsersIcon size={18} />} iconClass="bg-[#E5177E] text-white" label="Users" value={c.users.toLocaleString()} />
+            <Stat icon={<AlertTriangle size={18} />} iconClass="bg-warn text-white" label="Disputes" value={c.disputes.toLocaleString()} />
+          </div>
+        </Panel>
+      </Section>
+
+      {/* Washermen activity chart */}
+      <Section>
+        <Panel>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-ink">Washermen Activity per Month</p>
+              <p className="mt-0.5 text-xs text-faint">Orders processed across the current year</p>
+            </div>
+          </div>
+          <div className="mt-4">
+            <LineChart
+              rangeLabel={String(new Date().getFullYear())}
+              series={[{ name: 'Orders', color: '#1FA463', fill: true, data: data.ordersPerMonth.map((m) => m.count) }]}
+              labels={data.ordersPerMonth.map((m) => m.month)}
+            />
+          </div>
+        </Panel>
+      </Section>
+
+      {/* Recent activities */}
+      <Section>
+        <Panel>
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-ink">Recent Activities</p>
+            <Link href="/orders" className="text-xs font-medium text-primary underline-offset-2 hover:underline">View all</Link>
+          </div>
           <div className="mt-3 divide-y divide-line">
-            {overview.recentUsers.slice(0, 6).map((u) => (
-              <div key={u.id} className="flex items-center justify-between py-2.5">
-                <span className="flex items-center gap-2.5">
-                  <Avatar name={u.fullName} size={28} />
-                  <span>
-                    <span className="block text-sm font-medium text-ink">{u.fullName}</span>
-                    <span className="text-xs text-faint">{u.email ?? u.phone ?? '—'}</span>
-                  </span>
-                </span>
-                <span className="flex items-center gap-2">
-                  <span className="hidden text-xs text-faint sm:inline">{formatDate(u.createdAt)}</span>
-                  <Chip>{u.status}</Chip>
-                </span>
+            {data.recentActivities.length === 0 && <p className="py-6 text-center text-xs text-faint">No recent activity.</p>}
+            {data.recentActivities.map((a) => (
+              <div key={a.id} className="flex items-center justify-between py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-ink">
+                    Order <span className="font-mono text-xs">{a.reference ?? '—'}</span>
+                  </p>
+                  <p className="text-xs text-faint">{formatDateTime(a.at)}</p>
+                </div>
+                <Chip tone={statusTone(a.status)}>{pretty(a.status)}</Chip>
               </div>
             ))}
           </div>
         </Panel>
       </Section>
-
-      {/* Recent orders */}
-      <DataTable
-        columns={orderColumns}
-        rows={orders}
-        searchPlaceholder="Search by reference"
-        filters={[{ label: 'Status', options: [] }]}
-        pageSize={8}
-        emptyText="No orders yet."
-      />
     </div>
   );
 }
