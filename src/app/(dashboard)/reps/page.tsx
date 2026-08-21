@@ -42,12 +42,17 @@ export default function RepsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [sort, setSort] = useState<{ by: string; dir: 'ASC' | 'DESC' } | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
-    const qs = search ? `&search=${encodeURIComponent(search)}` : '';
+    const params = new URLSearchParams({ page: String(page), limit: '20' });
+    if (search) params.set('search', search);
+    if (status) params.set('status', status);
+    if (sort) { params.set('sortBy', sort.by); params.set('sortDir', sort.dir); }
     Promise.all([
-      api.get<Paginated<Rep>>(`/reps?page=${page}&limit=20${qs}`),
+      api.get<Paginated<Rep>>(`/reps?${params.toString()}`),
       api.get<Paginated<Area>>('/areas?limit=100'),
     ])
       .then(([r, a]) => {
@@ -57,7 +62,7 @@ export default function RepsPage() {
       })
       .catch((err) => setError(err?.response?.data?.message ?? 'Failed to load reps.'))
       .finally(() => setLoading(false));
-  }, [search, page]);
+  }, [search, page, status, sort]);
 
   useEffect(load, [load]);
 
@@ -209,7 +214,9 @@ export default function RepsPage() {
           searchPlaceholder="Search by name, email or phone"
           onSearch={(q) => { setSearch(q); setPage(1); }}
           serverPagination={{ page, pageSize: 20, total, onPageChange: setPage }}
-          filters={[{ label: 'Status', options: [] }]}
+          onSort={(by, dir) => { setSort({ by, dir: dir === 1 ? 'ASC' : 'DESC' }); setPage(1); }}
+          onFilter={(label, v) => { if (label === 'Status') { setStatus(v); setPage(1); } }}
+          filters={[{ label: 'Status', options: ['active', 'inactive', 'suspended'] }]}
           pageSize={10}
           emptyText="No reps yet. Add your first rep to get started."
           headerExtra={

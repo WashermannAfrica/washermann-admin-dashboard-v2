@@ -42,12 +42,17 @@ export default function WashermanPage() {
 
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<{ by: string; dir: 'ASC' | 'DESC' } | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
-    const qs = search ? `&search=${encodeURIComponent(search)}` : '';
+    const params = new URLSearchParams({ page: String(page), limit: '20' });
+    if (search) params.set('search', search);
+    if (status) params.set('verificationStatus', status);
+    if (sort) { params.set('sortBy', sort.by); params.set('sortDir', sort.dir); }
     Promise.all([
-      api.get<Paginated<Vendor>>(`/vendors?page=${page}&limit=20${qs}`),
+      api.get<Paginated<Vendor>>(`/vendors?${params.toString()}`),
       api.get<{ data: AreaLite[] }>('/areas?limit=100').catch(() => ({ data: { data: [] } })),
     ])
       .then(([v, a]) => {
@@ -57,7 +62,7 @@ export default function WashermanPage() {
       })
       .catch((err) => setError(apiErr(err)))
       .finally(() => setLoading(false));
-  }, [search, page]);
+  }, [search, page, status, sort]);
 
   useEffect(load, [load]);
 
@@ -193,7 +198,9 @@ export default function WashermanPage() {
           searchPlaceholder="Search name, business or email"
           onSearch={(q) => { setSearch(q); setPage(1); }}
           serverPagination={{ page, pageSize: 20, total, onPageChange: setPage }}
-          filters={[{ label: 'Status', key: 'status' }]}
+          onSort={(by, dir) => { setSort({ by, dir: dir === 1 ? 'ASC' : 'DESC' }); setPage(1); }}
+          onFilter={(label, v) => { if (label === 'Status') { setStatus(v); setPage(1); } }}
+          filters={[{ label: 'Status', options: ['pending_review', 'verified', 'rejected', 'suspended'] }]}
           exportName="washermen"
           headerExtra={<Button size="sm" onClick={() => setAddOpen(true)}><Plus size={14} /> Add Washerman</Button>}
           pageSize={10}

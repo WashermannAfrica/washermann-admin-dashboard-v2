@@ -54,6 +54,12 @@ interface DataTableProps<T> {
     total: number;
     onPageChange: (page: number) => void;
   };
+  /** When set, column sorting is server-side: the parent refetches sorted.
+   *  `key` is the column key; `dir` is 1 (asc) or -1 (desc). */
+  onSort?: (key: string, dir: 1 | -1) => void;
+  /** When set, filter pills are server-side: the parent refetches filtered.
+   *  Provide explicit `options` on each filter def (data is only one page). */
+  onFilter?: (label: string, value: string | null) => void;
 }
 
 function FilterPill({
@@ -122,6 +128,8 @@ export function DataTable<T extends Record<string, unknown>>({
   emptyText = 'Nothing here yet.',
   onSearch,
   serverPagination,
+  onSort,
+  onFilter,
 }: DataTableProps<T>) {
   const serverMode = !!serverPagination;
   const [q, setQ] = useState('');
@@ -171,14 +179,18 @@ export function DataTable<T extends Record<string, unknown>>({
         columns.some((c) => cellText(c, r).toLowerCase().includes(needle)),
       );
     }
-    for (const def of filters) {
-      const val = active[def.label];
-      if (!val) continue;
-      const c = colFor(def);
-      if (!c) continue;
-      out = out.filter((r) => cellText(c, r) === val);
+    // Client-side filters — skipped in server-filter mode.
+    if (!onFilter) {
+      for (const def of filters) {
+        const val = active[def.label];
+        if (!val) continue;
+        const c = colFor(def);
+        if (!c) continue;
+        out = out.filter((r) => cellText(c, r) === val);
+      }
     }
-    if (sortKey) {
+    // Client-side sort — skipped in server-sort mode.
+    if (!onSort && sortKey) {
       const col = columns.find((c) => c.key === sortKey);
       if (col) {
         out = [...out].sort((a, b) => {
@@ -206,8 +218,10 @@ export function DataTable<T extends Record<string, unknown>>({
   }
 
   function toggleSort(key: string) {
-    if (sortKey === key) setSortDir((d) => (d === 1 ? -1 : 1));
-    else { setSortKey(key); setSortDir(1); }
+    const nextDir: 1 | -1 = sortKey === key && sortDir === 1 ? -1 : 1;
+    setSortKey(key);
+    setSortDir(nextDir);
+    onSort?.(key, nextDir);
   }
 
   function exportCSV() {
@@ -242,7 +256,7 @@ export function DataTable<T extends Record<string, unknown>>({
             def={f}
             active={active[f.label] ?? null}
             options={filterOptions[f.label] ?? []}
-            onSelect={(v) => { setActive((a) => ({ ...a, [f.label]: v })); setPage(1); }}
+            onSelect={(v) => { setActive((a) => ({ ...a, [f.label]: v })); setPage(1); onFilter?.(f.label, v); }}
           />
         ))}
         <div className="ml-auto flex items-center gap-2">
