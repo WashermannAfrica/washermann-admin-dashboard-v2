@@ -39,19 +39,21 @@ export default function OrdersPage() {
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<{ by: string; dir: 'ASC' | 'DESC' } | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [service, setService] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
     const params = new URLSearchParams({ page: String(page), limit: '20' });
     if (search) params.set('search', search);
     if (status) params.set('status', status);
+    if (service) params.set('serviceType', service);
     if (sort) { params.set('sortBy', sort.by); params.set('sortDir', sort.dir); }
     api
       .get<Paginated<Order>>(`/orders?${params.toString()}`)
       .then((res) => { setOrders(res.data.data); setTotal(res.data.meta.total); })
       .catch((err) => setError(apiErr(err)))
       .finally(() => setLoading(false));
-  }, [search, page, status, sort]);
+  }, [search, page, status, service, sort]);
 
   useEffect(load, [load]);
 
@@ -101,8 +103,15 @@ export default function OrdersPage() {
           onSearch={(q) => { setSearch(q); setPage(1); }}
           serverPagination={{ page, pageSize: 20, total, onPageChange: setPage }}
           onSort={(by, dir) => { setSort({ by, dir: dir === 1 ? 'ASC' : 'DESC' }); setPage(1); }}
-          onFilter={(label, v) => { if (label === 'Status') { setStatus(v); setPage(1); } }}
-          filters={[{ label: 'Status', options: ['paid', 'broadcasting_rep', 'rep_assigned', 'broadcasting_vendor', 'vendor_assigned', 'scheduled', 'picked_up', 'with_vendor', 'in_progress', 'ready_for_delivery', 'out_for_delivery', 'delivered', 'completed', 'cancelled', 'disputed'] }]}
+          onFilter={(label, v) => {
+            if (label === 'Status') setStatus(v);
+            if (label === 'Service') setService(v);
+            setPage(1);
+          }}
+          filters={[
+            { label: 'Status', options: ['paid', 'broadcasting_rep', 'rep_assigned', 'broadcasting_vendor', 'vendor_assigned', 'scheduled', 'picked_up', 'with_vendor', 'in_progress', 'ready_for_delivery', 'out_for_delivery', 'delivered', 'completed', 'cancelled', 'disputed'] },
+            { label: 'Service', options: ['wash_fold', 'wash_iron'] },
+          ]}
           pageSize={10}
           emptyText="No orders yet."
         />
