@@ -39,10 +39,13 @@ export default function RepsPage() {
     [areas],
   );
 
+  const [search, setSearch] = useState('');
+
   const load = useCallback(() => {
     setLoading(true);
+    const qs = search ? `&search=${encodeURIComponent(search)}` : '';
     Promise.all([
-      api.get<Paginated<Rep>>('/reps?limit=100'),
+      api.get<Paginated<Rep>>(`/reps?limit=100${qs}`),
       api.get<Paginated<Area>>('/areas?limit=100'),
     ])
       .then(([r, a]) => {
@@ -51,7 +54,7 @@ export default function RepsPage() {
       })
       .catch((err) => setError(err?.response?.data?.message ?? 'Failed to load reps.'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [search]);
 
   useEffect(load, [load]);
 
@@ -201,6 +204,7 @@ export default function RepsPage() {
           columns={columns}
           rows={reps}
           searchPlaceholder="Search by name, email or phone"
+          onSearch={setSearch}
           filters={[{ label: 'Status', options: [] }]}
           pageSize={10}
           emptyText="No reps yet. Add your first rep to get started."

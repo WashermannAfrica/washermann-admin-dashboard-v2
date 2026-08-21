@@ -40,10 +40,13 @@ export default function WashermanPage() {
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState('');
 
+  const [search, setSearch] = useState('');
+
   const load = useCallback(() => {
     setLoading(true);
+    const qs = search ? `&search=${encodeURIComponent(search)}` : '';
     Promise.all([
-      api.get<Paginated<Vendor>>('/vendors?limit=100'),
+      api.get<Paginated<Vendor>>(`/vendors?limit=100${qs}`),
       api.get<{ data: AreaLite[] }>('/areas?limit=100').catch(() => ({ data: { data: [] } })),
     ])
       .then(([v, a]) => {
@@ -53,7 +56,7 @@ export default function WashermanPage() {
       })
       .catch((err) => setError(apiErr(err)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [search]);
 
   useEffect(load, [load]);
 
@@ -186,7 +189,8 @@ export default function WashermanPage() {
         <DataTable
           columns={columns}
           rows={vendors}
-          searchPlaceholder="Search"
+          searchPlaceholder="Search name, business or email"
+          onSearch={setSearch}
           filters={[{ label: 'Status', key: 'status' }]}
           exportName="washermen"
           headerExtra={<Button size="sm" onClick={() => setAddOpen(true)}><Plus size={14} /> Add Washerman</Button>}

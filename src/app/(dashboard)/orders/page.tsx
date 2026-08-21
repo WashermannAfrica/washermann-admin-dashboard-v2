@@ -35,14 +35,17 @@ export default function OrdersPage() {
   const [selected, setSelected] = useState<Order | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const [search, setSearch] = useState('');
+
   const load = useCallback(() => {
     setLoading(true);
+    const qs = search ? `&search=${encodeURIComponent(search)}` : '';
     api
-      .get<Paginated<Order>>('/orders?limit=100')
+      .get<Paginated<Order>>(`/orders?limit=100${qs}`)
       .then((res) => { setOrders(res.data.data); setTotal(res.data.meta.total); })
       .catch((err) => setError(apiErr(err)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [search]);
 
   useEffect(load, [load]);
 
@@ -89,6 +92,7 @@ export default function OrdersPage() {
           columns={columns}
           rows={orders}
           searchPlaceholder="Search by reference"
+          onSearch={setSearch}
           filters={[{ label: 'Status', options: [] }, { label: 'Service', options: [] }]}
           pageSize={10}
           emptyText="No orders yet."

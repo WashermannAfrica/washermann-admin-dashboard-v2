@@ -39,14 +39,17 @@ export default function StaffPage() {
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState('');
 
+  const [search, setSearch] = useState('');
+
   const load = useCallback(() => {
     setLoading(true);
+    const qs = search ? `&search=${encodeURIComponent(search)}` : '';
     api
-      .get<Paginated<StaffMember>>('/admin/staff?limit=100')
+      .get<Paginated<StaffMember>>(`/admin/staff?limit=100${qs}`)
       .then((res) => { setStaff(res.data.data); setTotal(res.data.meta.total); })
       .catch((err) => setError(apiErr(err)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [search]);
 
   useEffect(load, [load]);
 
@@ -134,6 +137,7 @@ export default function StaffPage() {
           columns={columns}
           rows={staff}
           searchPlaceholder="Search staff"
+          onSearch={setSearch}
           filters={[{ label: 'Status', options: [] }]}
           pageSize={10}
           emptyText="No staff yet."

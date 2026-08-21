@@ -24,14 +24,17 @@ export default function CompaniesPage() {
   const [toggling, setToggling] = useState<Company | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const [search, setSearch] = useState('');
+
   const load = useCallback(() => {
     setLoading(true);
+    const qs = search ? `&search=${encodeURIComponent(search)}` : '';
     api
-      .get<Paginated<Company>>('/companies?limit=100')
+      .get<Paginated<Company>>(`/companies?limit=100${qs}`)
       .then((res) => { setCompanies(res.data.data); setTotal(res.data.meta.total); })
       .catch((err) => setError(apiErr(err)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [search]);
 
   useEffect(load, [load]);
 
@@ -90,6 +93,7 @@ export default function CompaniesPage() {
           columns={columns}
           rows={companies}
           searchPlaceholder="Search by name or owner"
+          onSearch={setSearch}
           filters={[{ label: 'Status', options: [] }, { label: 'Activation', options: [] }]}
           pageSize={10}
           emptyText="No companies yet."

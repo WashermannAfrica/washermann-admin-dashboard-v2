@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Search, ChevronDown, Download, ArrowLeft, ArrowRight, ArrowDownUp, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Section, Panel } from './Section';
@@ -34,6 +34,13 @@ interface DataTableProps<T> {
   headerExtra?: React.ReactNode;
   bare?: boolean;
   emptyText?: string;
+  /**
+   * When provided, the search box drives SERVER-SIDE search: the value is
+   * debounced and passed to this callback (the parent refetches with it), and
+   * client-side text filtering is skipped so results beyond the loaded page are
+   * not hidden. Omit for the default fully client-side behaviour.
+   */
+  onSearch?: (q: string) => void;
 }
 
 function FilterPill({
@@ -100,9 +107,18 @@ export function DataTable<T extends Record<string, unknown>>({
   headerExtra,
   bare = false,
   emptyText = 'Nothing here yet.',
+  onSearch,
 }: DataTableProps<T>) {
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
+
+  // Server-side search: debounce the input and hand it to the parent, which
+  // refetches. Client text-filtering is then skipped (see `filtered`).
+  useEffect(() => {
+    if (!onSearch) return;
+    const t = setTimeout(() => onSearch(q.trim()), 300);
+    return () => clearTimeout(t);
+  }, [q, onSearch]);
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<1 | -1>(1);
   const [active, setActive] = useState<Record<string, string | null>>({});
@@ -132,7 +148,9 @@ export function DataTable<T extends Record<string, unknown>>({
 
   const filtered = useMemo(() => {
     let out = rows;
-    if (q.trim()) {
+    // Client-side text filter — skipped in server-search mode (parent already
+    // filtered), so matches outside the loaded page aren't hidden.
+    if (!onSearch && q.trim()) {
       const needle = q.toLowerCase();
       out = out.filter((r) =>
         columns.some((c) => cellText(c, r).toLowerCase().includes(needle)),
