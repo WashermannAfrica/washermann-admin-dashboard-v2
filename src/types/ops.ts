@@ -222,6 +222,22 @@ export type AdminAnalytics = {
   recentActivities: Array<{ id: string; reference: string | null; status: string; at: string }>;
 };
 
+export type UserDetail = {
+  user: {
+    id: string;
+    fullName: string;
+    email: string | null;
+    phone: string | null;
+    roles: string[];
+    status: string;
+    createdAt: string;
+  };
+  wallet: { balanceWP: number; fiatKobo: number };
+  stats: { totalOrders: number; completedOrders: number; totalSpentNaira: number };
+  orders: Array<{ id: string; reference: string; serviceType: string; status: string; totalWP: number; nairaEquivalentSnapshot: number | null; createdAt: string }>;
+  memberships: Array<{ id: string; companyId: string; status: string; companyName: string | null; tierName: string | null }>;
+};
+
 export type OrderLineItem = { label: string; category?: string; qty?: number | null; unitPriceWP?: number | null; subtotalWP: number };
 
 export type Order = {
