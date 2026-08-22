@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, ChevronDown, Download, ArrowLeft, ArrowRight, ArrowDownUp, Check, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Section, Panel } from './Section';
@@ -143,11 +143,21 @@ export function DataTable<T extends Record<string, unknown>>({
 
   // Server-side search: debounce the input and hand it to the parent, which
   // refetches. Client text-filtering is then skipped (see `filtered`).
+  //
+  // NB: depend ONLY on `q`. Parents pass an inline `onSearch` (new identity each
+  // render), so keying the effect on it would re-fire on every parent re-render
+  // — e.g. after clicking "Next", the parent re-renders, this fired, and calling
+  // onSearch('') reset the page back to 1. We call the latest onSearch via a ref
+  // and skip the initial mount (the parent's first load already has no search).
+  const onSearchRef = useRef(onSearch);
+  onSearchRef.current = onSearch;
+  const searchMounted = useRef(false);
   useEffect(() => {
-    if (!onSearch) return;
-    const t = setTimeout(() => onSearch(q.trim()), 300);
+    if (!onSearchRef.current) return;
+    if (!searchMounted.current) { searchMounted.current = true; return; }
+    const t = setTimeout(() => onSearchRef.current?.(q.trim()), 300);
     return () => clearTimeout(t);
-  }, [q, onSearch]);
+  }, [q]);
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<1 | -1>(1);
   const [active, setActive] = useState<Record<string, string | null>>({});

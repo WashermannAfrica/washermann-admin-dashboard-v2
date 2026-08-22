@@ -1,103 +1,114 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { TriangleAlert, RotateCw } from 'lucide-react';
+import { RotateCw } from 'lucide-react';
 import { EntityHero, HeroTabs } from '@/components/ui/EntityHero';
 import { DataTable, Column } from '@/components/ui/DataTable';
-import { Chip } from '@/components/ui/Chip';
-import { ConfirmModal } from '@/components/ui/Modal';
+import { Chip, statusTone } from '@/components/ui/Chip';
 import { Section, Panel } from '@/components/ui/Section';
-import { USERS, ORDERS, DISPUTES, Order, Dispute } from '@/lib/mock-data';
+import { Spinner } from '@/components/ui/Spinner';
+import { api } from '@/lib/api';
+import { apiErr } from '@/lib/apiError';
+import { formatDate } from '@/lib/utils';
+import type { ApiResponse } from '@/types';
+import type { UserDetail } from '@/types/ops';
 
-const MEMBERSHIPS = [
-  { company: 'CleanFresh Ltd', tier: 'Basic Tier' },
-  { company: 'SparkleWash', tier: 'Basic Tier' },
-];
+const naira = (n: number | null) => `₦${Number(n ?? 0).toLocaleString()}`;
+const pretty = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+const ROLE_LABEL: Record<string, string> = {
+  user: 'Customer', vendor: 'Vendor', rep: 'Wash Rep', sales_rep: 'Sales Rep',
+  admin: 'Admin', finance: 'Finance', company_owner: 'Company Owner', company_admin: 'Company Admin',
+  dispute_resolver: 'Dispute Resolver', washerman: 'Washerman',
+};
+
+type OrderRow = UserDetail['orders'][number];
 
 export default function UserDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const user = USERS.find((u) => u.id === params.id) ?? USERS[0];
+  const [data, setData] = useState<UserDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [tab, setTab] = useState('Orders');
-  const [deactivateOpen, setDeactivateOpen] = useState(false);
 
-  const orderCols: Column<Order>[] = [
-    { key: 'trackingId', header: 'Tracking ID', render: (o) => <span className="font-medium text-ink">{o.trackingId}</span> },
-    { key: 'amount', header: 'Amount', render: (o) => <span className="text-ink">{o.amount}</span> },
-    { key: 'date', header: 'Date', sortable: true, value: (o) => o.date, render: (o) => <span className="text-body">{o.date}</span> },
-    { key: 'status', header: 'Status', sortable: true, value: (o) => o.status, render: (o) => <Chip>{o.status}</Chip> },
+  useEffect(() => {
+    api
+      .get<ApiResponse<UserDetail>>(`/users/${params.id}/detail`)
+      .then((res) => setData(res.data.data))
+      .catch((err) => setError(apiErr(err)))
+      .finally(() => setLoading(false));
+  }, [params.id]);
+
+  if (loading) return <div className="flex justify-center py-24 text-primary"><Spinner size="lg" /></div>;
+  if (error) return <p className="py-12 text-center text-sm text-danger">{error}</p>;
+  if (!data) return null;
+
+  const { user, wallet, stats, orders, memberships } = data;
+  const roleLabel = user.roles[0] ? (ROLE_LABEL[user.roles[0]] ?? user.roles[0]) : 'User';
+
+  const orderCols: Column<OrderRow>[] = [
+    { key: 'reference', header: 'Tracking ID', render: (o) => <span className="font-mono text-xs text-ink">{o.reference}</span> },
+    { key: 'service', header: 'Service', value: (o) => o.serviceType, render: (o) => <span className="capitalize text-body">{o.serviceType.replace('_', ' & ')}</span> },
+    { key: 'amount', header: 'Amount', render: (o) => <span className="text-ink">{o.totalWP} WP <span className="text-xs text-faint">({naira(o.nairaEquivalentSnapshot)})</span></span> },
+    { key: 'date', header: 'Date', sortable: true, value: (o) => o.createdAt, render: (o) => <span className="text-body">{formatDate(o.createdAt)}</span> },
+    { key: 'status', header: 'Status', sortable: true, value: (o) => o.status, render: (o) => <Chip tone={statusTone(o.status)}>{pretty(o.status)}</Chip> },
     { key: 'view', header: '', render: () => <button onClick={() => router.push('/orders')} className="cursor-pointer font-medium text-ink underline-offset-2 hover:underline">View Detail</button> },
-  ];
-
-  const disputeCols: Column<Dispute>[] = [
-    { key: 'id', header: 'Dispute ID', render: (d) => <span className="text-body">{d.id}</span> },
-    { key: 'category', header: 'Category', render: (d) => <span className="font-medium text-ink">{d.category}</span> },
-    { key: 'amount', header: 'Amount', render: (d) => <span className="text-ink">{d.amount}</span> },
-    { key: 'date', header: 'Date', render: (d) => <span className="text-body">{d.date}</span> },
-    { key: 'status', header: 'Status', render: (d) => <Chip>{d.status}</Chip> },
   ];
 
   return (
     <div className="mx-auto max-w-6xl">
       <EntityHero
-        name={user.name}
-        contact={`${user.email}, ${user.phone}`}
-        chips={[user.status, 'Basic Tier', `${user.orders * 10} orders`]}
-        onDeactivate={() => setDeactivateOpen(true)}
+        name={user.fullName}
+        contact={[user.email, user.phone].filter(Boolean).join(', ') || '—'}
+        chips={[user.status, roleLabel, `${stats.totalOrders} orders`]}
         tiles={[
-          { label: 'Total Earnings', value: '245,000 pts', hint: '≈ ₦64,200', accent: true },
-          { label: 'Points Lost', value: '1,284 pts', hint: '≈ ₦245,000' },
+          { label: 'Wallet Balance', value: `${wallet.balanceWP.toLocaleString()} WP`, hint: `≈ ${naira(wallet.fiatKobo / 100)}`, accent: true },
+          { label: 'Total Spent', value: naira(stats.totalSpentNaira), hint: `${stats.completedOrders} completed` },
         ]}
       />
 
-      <HeroTabs tabs={['Orders', 'Disputes', 'Company / Teams']} active={tab} onChange={setTab} />
+      <HeroTabs tabs={['Orders', 'Company / Teams']} active={tab} onChange={setTab} />
 
       <div className="mt-4">
         {tab === 'Orders' && (
-          <DataTable columns={orderCols} rows={ORDERS.slice(0, 15)} searchPlaceholder="Search by tracking ID" pageSize={5} />
-        )}
-        {tab === 'Disputes' && (
-          <DataTable columns={disputeCols} rows={DISPUTES.slice(0, 6)} searchPlaceholder="Search disputes" pageSize={5} />
+          <DataTable columns={orderCols} rows={orders} searchPlaceholder="Search by tracking ID" pageSize={8} emptyText="This user has no orders yet." />
         )}
         {tab === 'Company / Teams' && (
           <Section>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {MEMBERSHIPS.map((m) => (
-                <Panel key={m.company}>
-                  <div className="flex items-center justify-between border-b border-dashed border-line pb-3">
-                    <span className="flex items-baseline gap-2">
-                      <span className="font-bold text-ink">{m.company}</span>
-                      <span className="text-xs text-faint">{m.tier}</span>
-                    </span>
-                    <span className="cursor-pointer text-[13px] font-semibold text-ink underline underline-offset-2">View Company</span>
-                  </div>
-                  <p className="mt-3 flex items-center gap-1.5 text-xs text-faint">
-                    <RotateCw size={12} /> Quarterly·Ends Jun 30, 2026
-                  </p>
-                  <div className="mt-2.5 space-y-2">
-                    {['Used this cycle', 'Earned/cycle', 'Points lost'].map((l) => (
-                      <div key={l} className="flex items-center justify-between">
-                        <span className="text-[13px] text-faint">{l}</span>
-                        <span className="text-[13px] font-bold text-ink">₦0</span>
-                      </div>
-                    ))}
-                  </div>
-                </Panel>
-              ))}
-            </div>
+            {memberships.length === 0 ? (
+              <Panel><p className="py-6 text-center text-sm text-faint">Not a member of any company.</p></Panel>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {memberships.map((m) => (
+                  <Panel key={m.id}>
+                    <div className="flex items-center justify-between border-b border-dashed border-line pb-3">
+                      <span className="flex items-baseline gap-2">
+                        <span className="font-bold text-ink">{m.companyName ?? '—'}</span>
+                        <span className="text-xs text-faint">{m.tierName ?? 'No tier'}</span>
+                      </span>
+                      <button
+                        onClick={() => router.push(`/companies/${m.companyId}`)}
+                        className="cursor-pointer text-[13px] font-semibold text-ink underline underline-offset-2"
+                      >
+                        View Company
+                      </button>
+                    </div>
+                    <p className="mt-3 flex items-center gap-1.5 text-xs text-faint">
+                      <RotateCw size={12} /> Membership
+                    </p>
+                    <div className="mt-2.5 flex items-center justify-between">
+                      <span className="text-[13px] text-faint">Status</span>
+                      <Chip tone={statusTone(m.status)}>{pretty(m.status)}</Chip>
+                    </div>
+                  </Panel>
+                ))}
+              </div>
+            )}
           </Section>
         )}
       </div>
-
-      <ConfirmModal
-        open={deactivateOpen}
-        onClose={() => setDeactivateOpen(false)}
-        icon={<TriangleAlert size={20} />}
-        title={`Deactivate ${user.name}?`}
-        body="Deactivating this user blocks logins and new orders. Their wallet balance is preserved and restored on reactivation."
-        confirmLabel="Deactivate"
-      />
     </div>
   );
 }
