@@ -28,6 +28,9 @@ export type Area = {
   locations?: AreaLocation[];
   repsCount?: number;
   vendorsCount?: number;
+  verifiedVendorsCount?: number;
+  verifiedRepsCount?: number;
+  verifiedSalesRepsCount?: number;
 }
 
 export type AreaDetail = Area & {

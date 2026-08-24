@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { MapPin, Plus, Download, Search, ChevronDown, Users, WashingMachine, Bus } from 'lucide-react';
+import { MapPin, Plus, Download, Search, ChevronDown, Users, WashingMachine, Bus, ShieldCheck, Check } from 'lucide-react';
 import { PageKpi, StatBlock } from '@/components/ui/PageKpi';
 import { Section, Panel } from '@/components/ui/Section';
 import { Modal } from '@/components/ui/Modal';
@@ -17,6 +17,30 @@ import type { Paginated } from '@/types';
 import type { Area } from '@/types/ops';
 
 const NG_STATES = ['Lagos', 'FCT', 'Rivers', 'Oyo', 'Kano'];
+
+/** The three area-coverage predicates the admin can filter on (AND-combined). */
+const COVERAGE_FILTERS = [
+  { key: 'vendors', label: 'Verified vendors', get: (a: Area) => a.verifiedVendorsCount ?? 0 },
+  { key: 'washreps', label: 'Verified wash-reps', get: (a: Area) => a.verifiedRepsCount ?? 0 },
+  { key: 'salesreps', label: 'Verified sales-reps', get: (a: Area) => a.verifiedSalesRepsCount ?? 0 },
+] as const;
+
+/** Small pill showing how many verified people of one type serve this area. */
+function CovBadge({ n, label }: { n: number; label: string }) {
+  const on = n > 0;
+  return (
+    <span
+      title={`${n} verified ${label}`}
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium',
+        on ? 'bg-mint-soft text-forest' : 'bg-section text-faint',
+      )}
+    >
+      {on && <Check size={11} />}
+      {n} {label}
+    </span>
+  );
+}
 
 function AreaCard({ area }: { area: Area }) {
   const [expanded, setExpanded] = useState(false);
@@ -52,6 +76,12 @@ function AreaCard({ area }: { area: Area }) {
           )}
           {locs.length === 0 && <span className="text-[11px] text-faint">No locations yet</span>}
         </div>
+        {/* verified coverage */}
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <CovBadge n={area.verifiedVendorsCount ?? 0} label="vendors" />
+          <CovBadge n={area.verifiedRepsCount ?? 0} label="wash-reps" />
+          <CovBadge n={area.verifiedSalesRepsCount ?? 0} label="sales-reps" />
+        </div>
         <div className="mt-4 flex items-center gap-4 border-t border-dashed border-line pt-3 text-xs text-faint">
           <span className="flex items-center gap-1"><Users size={12} /> {area.repsCount ?? 0} reps</span>
           <span className="flex items-center gap-1"><WashingMachine size={12} /> {area.vendorsCount ?? 0} vendors</span>
@@ -71,6 +101,8 @@ export default function AreasPage() {
   const [q, setQ] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [statusOpen, setStatusOpen] = useState(false);
+  const [coverage, setCoverage] = useState<Set<string>>(new Set());
+  const [coverageOpen, setCoverageOpen] = useState(false);
 
   const [form, setForm] = useState({ name: '', state: 'Lagos', targetUsers: '', transportFeeWP: '', description: '' });
   const [draftLocs, setDraftLocs] = useState<DraftLocation[]>([]);
@@ -88,11 +120,23 @@ export default function AreasPage() {
 
   useEffect(load, [load]);
 
-  const filtered = areas.filter(
-    (a) =>
-      a.name.toLowerCase().includes(q.toLowerCase()) &&
-      (!statusFilter || (statusFilter === 'Active' ? a.isActive : !a.isActive)),
-  );
+  const toggleCoverage = (key: string) =>
+    setCoverage((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  const filtered = areas.filter((a) => {
+    if (!a.name.toLowerCase().includes(q.toLowerCase())) return false;
+    if (statusFilter && (statusFilter === 'Active' ? !a.isActive : a.isActive)) return false;
+    // Coverage: AND — the area must have ≥1 of every selected verified actor type.
+    for (const f of COVERAGE_FILTERS) {
+      if (coverage.has(f.key) && f.get(a) <= 0) return false;
+    }
+    return true;
+  });
   const townsCovered = areas.reduce((n, a) => n + (a.locations?.length ?? 0), 0);
   const repsDeployed = areas.reduce((n, a) => n + (a.repsCount ?? 0), 0);
 
@@ -128,9 +172,9 @@ export default function AreasPage() {
   }
 
   function exportCSV() {
-    const head = 'Name,State,Target Users,Locations,Transport Fee (WP),Status';
+    const head = 'Name,State,Target Users,Locations,Transport Fee (WP),Status,Verified Vendors,Verified Wash-reps,Verified Sales-reps';
     const body = filtered
-      .map((a) => `"${a.name}","${a.state}",${a.targetUsers},"${(a.locations ?? []).map((l) => l.name).join('; ')}",${a.transportFeeWP},"${a.isActive ? 'Active' : 'Inactive'}"`)
+      .map((a) => `"${a.name}","${a.state}",${a.targetUsers},"${(a.locations ?? []).map((l) => l.name).join('; ')}",${a.transportFeeWP},"${a.isActive ? 'Active' : 'Inactive'}",${a.verifiedVendorsCount ?? 0},${a.verifiedRepsCount ?? 0},${a.verifiedSalesRepsCount ?? 0}`)
       .join('\n');
     const blob = new Blob([head + '\n' + body], { type: 'text/csv' });
     const link = document.createElement('a');
@@ -186,6 +230,51 @@ export default function AreasPage() {
               </>
             )}
           </span>
+
+          {/* Coverage — multi-select, AND-combined */}
+          <span className="relative">
+            <button
+              onClick={() => setCoverageOpen((o) => !o)}
+              className={cn(
+                'flex h-9 items-center gap-1.5 rounded-full border px-4 text-[13px] transition-colors',
+                coverage.size ? 'border-primary bg-mint-soft text-forest' : 'border-line bg-white text-body hover:bg-section',
+              )}
+            >
+              <ShieldCheck size={14} className={coverage.size ? 'text-forest' : 'text-faint'} />
+              {coverage.size ? `Coverage · ${coverage.size}` : 'Coverage'}
+              <ChevronDown size={14} className={coverage.size ? 'text-forest' : 'text-faint'} />
+            </button>
+            {coverageOpen && (
+              <>
+                <span className="fixed inset-0 z-30" onClick={() => setCoverageOpen(false)} />
+                <span className="absolute left-0 z-40 mt-1 w-64 overflow-hidden rounded-2xl border border-line bg-white py-1 shadow-xl">
+                  <p className="px-4 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-faint">Areas with…</p>
+                  {COVERAGE_FILTERS.map((f) => {
+                    const on = coverage.has(f.key);
+                    return (
+                      <button
+                        key={f.key}
+                        onClick={() => toggleCoverage(f.key)}
+                        className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-[13px] text-ink hover:bg-section"
+                      >
+                        <span className={cn('flex h-4 w-4 items-center justify-center rounded border', on ? 'border-primary bg-primary text-white' : 'border-line')}>
+                          {on && <Check size={12} strokeWidth={3} />}
+                        </span>
+                        {f.label}
+                      </button>
+                    );
+                  })}
+                  <div className="mt-1 flex items-center justify-between border-t border-line px-4 py-2">
+                    <span className="text-[11px] text-faint">Matches areas having ALL selected</span>
+                    {coverage.size > 0 && (
+                      <button onClick={() => setCoverage(new Set())} className="text-[12px] font-medium text-primary hover:underline">Clear</button>
+                    )}
+                  </div>
+                </span>
+              </>
+            )}
+          </span>
+
           <div className="ml-auto flex items-center gap-2">
             <button
               onClick={() => setAddOpen(true)}
@@ -204,7 +293,9 @@ export default function AreasPage() {
         ) : error ? (
           <p className="py-12 text-center text-sm text-danger">{error}</p>
         ) : filtered.length === 0 ? (
-          <p className="py-12 text-center text-sm text-faint">No areas found. Add your first area to get started.</p>
+          <p className="py-12 text-center text-sm text-faint">
+            {areas.length === 0 ? 'No areas found. Add your first area to get started.' : 'No areas match your filters.'}
+          </p>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map((a) => <AreaCard key={a.id} area={a} />)}
