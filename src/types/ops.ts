@@ -241,6 +241,35 @@ export type UserDetail = {
   memberships: Array<{ id: string; companyId: string; status: string; companyName: string | null; tierName: string | null }>;
 };
 
+export type AuditLogEntry = {
+  id: string;
+  app: string;
+  category: string;
+  action: string;
+  description: string;
+  actorId: string | null;
+  actorType: string;
+  actorName: string | null;
+  targetType: string | null;
+  targetId: string | null;
+  targetLabel: string | null;
+  method: string | null;
+  path: string | null;
+  statusCode: number | null;
+  success: boolean;
+  ip: string | null;
+  userAgent: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+};
+
+export type AuditFilterOptions = {
+  apps: string[];
+  categories: string[];
+  actions: string[];
+  actorTypes: string[];
+};
+
 export type OrderLineItem = { label: string; category?: string; qty?: number | null; unitPriceWP?: number | null; subtotalWP: number };
 
 export type Order = {

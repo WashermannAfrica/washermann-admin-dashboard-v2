@@ -22,6 +22,7 @@ import {
   Mail,
   Newspaper,
   GraduationCap,
+  ScrollText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -51,6 +52,7 @@ const MAIN: NavItem[] = [
   { label: 'Admins & Staff', href: '/staff',        icon: <ShieldCheck size={16} /> },
   { label: 'Templates',     href: '/templates',     icon: <Mail size={16} /> },
   { label: 'Blog',          href: '/blog',          icon: <Newspaper size={16} /> },
+  { label: 'Audit Log',     href: '/audit',         icon: <ScrollText size={16} /> },
 ];
 
 const OTHERS: NavItem[] = [
