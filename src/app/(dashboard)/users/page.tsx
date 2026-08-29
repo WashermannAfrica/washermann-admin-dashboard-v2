@@ -33,7 +33,9 @@ export default function UsersPage() {
 
   useEffect(() => {
     setLoading(true);
-    const params = new URLSearchParams({ page: String(page), limit: '20' });
+    // The Users module is customers only — vendors, reps, companies and staff
+    // each have their own module.
+    const params = new URLSearchParams({ page: String(page), limit: '20', customersOnly: 'true' });
     if (search) params.set('search', search);
     if (status) params.set('status', status);
     if (sort) { params.set('sortBy', sort.by); params.set('sortDir', sort.dir); }
@@ -67,10 +69,10 @@ export default function UsersPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <PageKpi icon={<UsersIcon size={16} />} iconClass="bg-[#E5177E] text-white" label="Total Users" value={String(total)} />
+      <PageKpi icon={<UsersIcon size={16} />} iconClass="bg-[#E5177E] text-white" label="Total Customers" value={String(total)} />
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <StatBlock label="Active Users" value={String(activeCount)} hint="On the platform" />
+        <StatBlock label="Active Customers" value={String(activeCount)} hint="On the platform" />
         <StatBlock label="Loaded" value={String(users.length)} hint={`of ${total}`} />
       </div>
 
