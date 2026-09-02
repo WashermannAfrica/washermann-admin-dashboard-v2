@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { Eye, EyeOff, Lock } from 'lucide-react';
 import axios, { AxiosError } from 'axios';
 import { useAuthStore } from '@/store/auth.store';
@@ -22,7 +22,6 @@ export default function InvitePage() {
 }
 
 function InviteForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get('token') ?? '';
   const { login } = useAuthStore();
@@ -51,10 +50,11 @@ function InviteForm() {
         password,
       });
       const { user, accessToken, refreshToken } = data.data;
+      // The route guard (proxy) checks this cookie. Set it first, then hard-navigate
+      // so the proxy sees it on the first request (a soft nav bounces to /login).
+      document.cookie = `wm-admin-token=${accessToken}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
       login(user, accessToken, refreshToken);
-      // The route guard (proxy) checks this cookie — same as the login page.
-      document.cookie = `wm-admin-token=${accessToken}; path=/; SameSite=Lax`;
-      router.replace('/');
+      window.location.assign('/');
     } catch (err) {
       const e2 = err as AxiosError<{ message?: string | string[] }>;
       const m = e2.response?.data?.message;
