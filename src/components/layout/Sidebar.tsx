@@ -22,6 +22,8 @@ import {
   Mail,
   Newspaper,
   GraduationCap,
+  ScrollText,
+  Headset,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -46,11 +48,13 @@ const MAIN: NavItem[] = [
   { label: 'Catalogue',     href: '/catalogue',     icon: <Shirt size={16} /> },
   { label: 'Customers',     href: '/users',         icon: <Users size={16} /> },
   { label: 'Disputes',      href: '/disputes',      icon: <Scale size={16} /> },
+  { label: 'Live Support',  href: '/support',       icon: <Headset size={16} /> },
   { label: 'Financials',    href: '/financials',    icon: <Banknote size={16} /> },
   { label: 'Washer-points', href: '/washer-points', icon: <CircleDollarSign size={16} /> },
   { label: 'Admins & Staff', href: '/staff',        icon: <ShieldCheck size={16} /> },
   { label: 'Templates',     href: '/templates',     icon: <Mail size={16} /> },
   { label: 'Blog',          href: '/blog',          icon: <Newspaper size={16} /> },
+  { label: 'Audit Log',     href: '/audit',         icon: <ScrollText size={16} /> },
 ];
 
 const OTHERS: NavItem[] = [
