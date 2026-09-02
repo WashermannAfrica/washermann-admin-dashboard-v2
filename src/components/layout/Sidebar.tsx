@@ -23,6 +23,7 @@ import {
   Newspaper,
   GraduationCap,
   ScrollText,
+  Headset,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -47,6 +48,7 @@ const MAIN: NavItem[] = [
   { label: 'Catalogue',     href: '/catalogue',     icon: <Shirt size={16} /> },
   { label: 'Customers',     href: '/users',         icon: <Users size={16} /> },
   { label: 'Disputes',      href: '/disputes',      icon: <Scale size={16} /> },
+  { label: 'Live Support',  href: '/support',       icon: <Headset size={16} /> },
   { label: 'Financials',    href: '/financials',    icon: <Banknote size={16} /> },
   { label: 'Washer-points', href: '/washer-points', icon: <CircleDollarSign size={16} /> },
   { label: 'Admins & Staff', href: '/staff',        icon: <ShieldCheck size={16} /> },
