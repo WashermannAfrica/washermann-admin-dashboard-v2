@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { RotateCw } from 'lucide-react';
+import { RotateCw, TriangleAlert, Trash2 } from 'lucide-react';
 import { EntityHero, HeroTabs } from '@/components/ui/EntityHero';
 import { DataTable, Column } from '@/components/ui/DataTable';
 import { Chip, statusTone } from '@/components/ui/Chip';
 import { Section, Panel } from '@/components/ui/Section';
+import { ConfirmModal } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
 import { api } from '@/lib/api';
 import { apiErr } from '@/lib/apiError';
@@ -32,8 +33,10 @@ export default function UserDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [tab, setTab] = useState('Orders');
+  const [confirm, setConfirm] = useState<'suspend' | 'delete' | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     api
       .get<ApiResponse<UserDetail>>(`/users/${params.id}/detail`)
       .then((res) => setData(res.data.data))
@@ -41,12 +44,39 @@ export default function UserDetailPage() {
       .finally(() => setLoading(false));
   }, [params.id]);
 
+  useEffect(load, [load]);
+
+  async function act() {
+    if (!confirm || !data) return;
+    setBusy(true);
+    try {
+      if (confirm === 'suspend') {
+        const next = data.user.status === 'suspended' ? 'active' : 'suspended';
+        await api.patch(`/users/${params.id}/status`, { status: next });
+        setConfirm(null);
+        setLoading(true);
+        load();
+      } else {
+        await api.delete(`/users/${params.id}`);
+        router.push('/users');
+      }
+    } catch (err) {
+      setError(apiErr(err));
+      setConfirm(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (loading) return <div className="flex justify-center py-24 text-primary"><Spinner size="lg" /></div>;
   if (error) return <p className="py-12 text-center text-sm text-danger">{error}</p>;
   if (!data) return null;
 
   const { user, wallet, stats, orders, memberships } = data;
   const roleLabel = user.roles[0] ? (ROLE_LABEL[user.roles[0]] ?? user.roles[0]) : 'User';
+  const suspended = user.status === 'suspended';
+  const deleted = user.status === 'deactivated';
+  const heroBtn = 'flex h-9 items-center gap-2 rounded-full px-4 text-xs font-semibold transition-colors';
 
   const orderCols: Column<OrderRow>[] = [
     { key: 'reference', header: 'Tracking ID', render: (o) => <span className="font-mono text-xs text-ink">{o.reference}</span> },
@@ -67,6 +97,21 @@ export default function UserDetailPage() {
           { label: 'Wallet Balance', value: `${wallet.balanceWP.toLocaleString()} WP`, hint: `≈ ${naira(wallet.fiatKobo / 100)}`, accent: true },
           { label: 'Total Spent', value: naira(stats.totalSpentNaira), hint: `${stats.completedOrders} completed` },
         ]}
+        extraActions={
+          deleted ? undefined : (
+            <>
+              <button
+                className={`${heroBtn} ${suspended ? 'bg-primary text-white hover:bg-primary-dark' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                onClick={() => setConfirm('suspend')}
+              >
+                <TriangleAlert size={13} /> {suspended ? 'Reactivate' : 'Suspend'}
+              </button>
+              <button className={`${heroBtn} bg-danger text-white hover:bg-[#b53a2e]`} onClick={() => setConfirm('delete')}>
+                <Trash2 size={13} /> Delete
+              </button>
+            </>
+          )
+        }
       />
 
       <HeroTabs tabs={['Orders', 'Company / Teams']} active={tab} onChange={setTab} />
@@ -109,6 +154,29 @@ export default function UserDetailPage() {
           </Section>
         )}
       </div>
+
+      <ConfirmModal
+        open={confirm === 'suspend'}
+        onClose={() => setConfirm(null)}
+        onConfirm={act}
+        icon={<TriangleAlert size={20} />}
+        danger={!suspended}
+        title={suspended ? `Reactivate ${user.fullName}?` : `Suspend ${user.fullName}?`}
+        body={suspended
+          ? 'Reactivating restores the customer’s access — they can sign in and place orders again.'
+          : 'Suspending blocks the customer from signing in immediately. Their wallet, orders and history are preserved.'}
+        confirmLabel={busy ? 'Saving…' : suspended ? 'Reactivate' : 'Suspend'}
+      />
+      <ConfirmModal
+        open={confirm === 'delete'}
+        onClose={() => setConfirm(null)}
+        onConfirm={act}
+        icon={<Trash2 size={20} />}
+        danger
+        title={`Delete ${user.fullName}?`}
+        body="This permanently deletes the account: personal data is anonymised and all sessions are revoked. Financial and order history is retained (attributed to an anonymised id). Blocked if the wallet has a balance, an order is in progress, or a dispute is open."
+        confirmLabel={busy ? 'Deleting…' : 'Delete account'}
+      />
     </div>
   );
 }
