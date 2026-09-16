@@ -241,6 +241,91 @@ export type UserDetail = {
   memberships: Array<{ id: string; companyId: string; status: string; companyName: string | null; tierName: string | null }>;
 };
 
+export type AuditLogEntry = {
+  id: string;
+  app: string;
+  category: string;
+  action: string;
+  description: string;
+  actorId: string | null;
+  actorType: string;
+  actorName: string | null;
+  targetType: string | null;
+  targetId: string | null;
+  targetLabel: string | null;
+  method: string | null;
+  path: string | null;
+  statusCode: number | null;
+  success: boolean;
+  ip: string | null;
+  userAgent: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+};
+
+export type AuditFilterOptions = {
+  apps: string[];
+  categories: string[];
+  actions: string[];
+  actorTypes: string[];
+};
+
+export type DisputeStatus = 'reported' | 'under_review' | 'investigating' | 'resolved' | 'rejected';
+
+export type DisputeCounts = { total: number; open: number; investigating: number; closed: number };
+
+export type DisputeListItem = {
+  id: string;
+  reference: string;
+  orderId: string;
+  orderRef: string | null;
+  issueType: string;
+  status: DisputeStatus;
+  affectedItems: { label: string; qty: number }[];
+  createdAt: string;
+};
+
+export type DisputeDetail = {
+  id: string;
+  reference: string;
+  orderId: string;
+  orderRef: string | null;
+  issueType: string;
+  description: string;
+  affectedItems: { label: string; qty: number }[];
+  preferredResolutions: string[];
+  evidenceUrls: string[];
+  status: DisputeStatus;
+  resolution: { outcome: string; note: string | null; refundedWP: number | null; resolvedAt: string | null } | null;
+  timeline: { status: string; note: string | null; actorRole: string | null; at: string }[];
+  createdAt: string;
+};
+
+export type SupportMessage = {
+  id: string;
+  conversationId: string;
+  senderId: string | null;
+  senderType: 'user' | 'agent' | 'system';
+  senderName: string | null;
+  body: string;
+  attachments: string[] | null;
+  createdAt: string;
+};
+
+export type SupportConversation = {
+  id: string;
+  userId: string;
+  userRole: string;
+  status: 'open' | 'pending' | 'closed';
+  assignedAgentId: string | null;
+  lastMessageAt: string | null;
+  lastMessagePreview: string | null;
+  unreadForUser: number;
+  unreadForAgent: number;
+  createdAt: string;
+  user?: { fullName: string | null; email: string | null; phone?: string | null } | null;
+};
+
 export type OrderLineItem = { label: string; category?: string; qty?: number | null; unitPriceWP?: number | null; subtotalWP: number };
 
 export type Order = {

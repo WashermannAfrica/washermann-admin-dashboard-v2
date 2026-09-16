@@ -132,6 +132,7 @@ export default function WashermanPage() {
         </span>
       ),
     },
+    { key: 'phone', header: 'Phone', value: (v) => v.user?.phone ?? v.phone ?? '', render: (v) => <span className="whitespace-nowrap text-body">{v.user?.phone ?? v.phone ?? '—'}</span> },
     { key: 'orders', header: 'Orders', sortable: true, value: (v) => v.orderCount ?? 0, render: (v) => <span className="text-body">{v.orderCount ?? 0}</span> },
     { key: 'earnings', header: 'Earnings', sortable: true, value: (v) => v.earnedWp ?? 0, render: (v) => <span className="text-ink">{wp(v.earnedWp)}</span> },
     { key: 'escrow', header: 'Escrow', sortable: true, value: (v) => v.balanceWp ?? 0, render: (v) => <span className="text-body">{wp(v.balanceWp)}</span> },
