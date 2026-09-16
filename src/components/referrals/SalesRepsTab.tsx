@@ -94,6 +94,7 @@ export function SalesRepsTab() {
         </button>
       ),
     },
+    { key: 'phone', header: 'Phone', value: (r) => r.user?.phone ?? '', render: (r) => <span className="whitespace-nowrap text-body">{r.user?.phone ?? '—'}</span> },
     { key: 'status', header: 'Status', sortable: true, value: (r) => r.status, render: (r) => <Chip>{r.status}</Chip> },
     {
       key: 'assessment', header: 'Assessment', value: (r) => r.bestScorePct,
