@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Eye, EyeOff, Mail } from 'lucide-react';
 import axios from 'axios';
@@ -32,8 +32,9 @@ export default function LoginPage() {
   );
 }
 
+const AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days — persistent, matches the persisted store
+
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { login, isAuthenticated } = useAuthStore();
 
@@ -44,12 +45,22 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Once authenticated, leave the login page. Use a HARD navigation, not
+  // router.replace: the route guard is the edge proxy (src/proxy.ts) which reads
+  // the wm-admin-token cookie, and a soft client navigation can be served from a
+  // cached RSC fetched before the cookie existed — so it bounces back to /login
+  // until a manual refresh. A full navigation always carries the cookie.
   useEffect(() => {
-    if (isAuthenticated) {
-      const next = searchParams.get('next') ?? '/';
-      router.replace(next);
+    if (!isAuthenticated) return;
+    const hasCookie = typeof document !== 'undefined' && document.cookie.includes('wm-admin-token=');
+    if (hasCookie) {
+      window.location.assign(searchParams.get('next') ?? '/');
+    } else {
+      // Persisted session with no cookie (e.g. browser restarted a session cookie
+      // away) — clear it so the form works instead of looping.
+      useAuthStore.getState().logout();
     }
-  }, [isAuthenticated, router, searchParams]);
+  }, [isAuthenticated, searchParams]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -65,9 +76,9 @@ function LoginForm() {
         roles: ['admin'],
         status: 'active',
       };
+      // Cookie first (the proxy reads it), then flip state — the effect navigates.
+      document.cookie = `wm-admin-token=demo-access-token; path=/; max-age=${AUTH_COOKIE_MAX_AGE}; SameSite=Lax`;
       login(demoUser, 'demo-access-token', 'demo-refresh-token');
-      document.cookie = 'wm-admin-token=demo-access-token; path=/; SameSite=Lax';
-      router.replace(searchParams.get('next') ?? '/');
       return;
     }
 
@@ -83,9 +94,10 @@ function LoginForm() {
         return;
       }
 
+      // Cookie first (the proxy reads it), then flip state — the effect navigates
+      // with a hard load so the proxy sees the cookie on the very first request.
+      document.cookie = `wm-admin-token=${accessToken}; path=/; max-age=${AUTH_COOKIE_MAX_AGE}; SameSite=Lax`;
       login(user, accessToken, refreshToken);
-      document.cookie = `wm-admin-token=${accessToken}; path=/; SameSite=Lax`;
-      router.replace(searchParams.get('next') ?? '/');
     } catch (err: unknown) {
       if (axios.isAxiosError(err) && err.response) {
         setError((err.response.data as { message?: string })?.message ?? 'Invalid email or password.');
