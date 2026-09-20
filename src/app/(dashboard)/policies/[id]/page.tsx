@@ -83,6 +83,17 @@ export default function PolicyDetailPage() {
     setEditorOpen(true);
   }
 
+  function openNewVersionFrom(v: PolicyVersion) {
+    // Edit a published/archived version's content — saving creates a NEW version.
+    setEditingNumber(null);
+    setMarkdown(v.contentMarkdown);
+    setEffectiveDate(today());
+    setChangeSummary('');
+    setRequiresReconsent(false);
+    setError('');
+    setEditorOpen(true);
+  }
+
   function openEditDraft(v: PolicyVersion) {
     setEditingNumber(v.versionNumber);
     setMarkdown(v.contentMarkdown);
@@ -245,11 +256,13 @@ export default function PolicyDetailPage() {
                   </div>
                   <div className="flex shrink-0 gap-2">
                     <Button variant="outline" onClick={() => setPreview(v)}><Eye size={14} /> Preview</Button>
-                    {v.status === 'draft' && (
+                    {v.status === 'draft' ? (
                       <>
                         <Button variant="outline" onClick={() => openEditDraft(v)}><Pencil size={14} /> Edit</Button>
                         <Button onClick={() => setPublishing(v)}><UploadCloud size={14} /> Publish</Button>
                       </>
+                    ) : (
+                      <Button variant="outline" onClick={() => openNewVersionFrom(v)}><Pencil size={14} /> Edit</Button>
                     )}
                   </div>
                 </div>
