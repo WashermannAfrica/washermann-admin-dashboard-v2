@@ -9,6 +9,7 @@ import { Section, Panel } from '@/components/ui/Section';
 import { Chip } from '@/components/ui/Chip';
 import { Button } from '@/components/ui/Button';
 import { Modal, ConfirmModal } from '@/components/ui/Modal';
+import { Drawer } from '@/components/ui/Drawer';
 import { Input, Textarea } from '@/components/ui/Input';
 import { TagInput } from '@/components/ui/TagInput';
 import { Spinner } from '@/components/ui/Spinner';
@@ -258,9 +259,22 @@ export default function PolicyDetailPage() {
         )}
       </Section>
 
-      {/* ─── Editor ─── */}
-      <Modal open={editorOpen} onClose={() => setEditorOpen(false)} title={editingNumber == null ? 'New version' : `Edit draft v${editingNumber}`}>
-        <div className="space-y-4">
+      {/* ─── Editor (right slide-in) ─── */}
+      <Drawer
+        open={editorOpen}
+        onClose={() => setEditorOpen(false)}
+        title={editingNumber == null ? 'New version' : `Edit draft v${editingNumber}`}
+        widthClass="max-w-3xl"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setEditorOpen(false)}>Cancel</Button>
+            <Button onClick={saveVersion} disabled={saving || !markdown.trim() || !effectiveDate}>
+              {saving ? 'Saving…' : editingNumber == null ? 'Save draft' : 'Save changes'}
+            </Button>
+          </>
+        }
+      >
+        <div className="flex h-full flex-col gap-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Input label="Effective date" type="date" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)} required />
             <label className="flex items-end gap-2 pb-2 text-sm text-body">
@@ -269,24 +283,19 @@ export default function PolicyDetailPage() {
             </label>
           </div>
           <Input label="Change summary (optional)" value={changeSummary} onChange={(e) => setChangeSummary(e.target.value)} placeholder="What changed vs the previous version" />
-          <Textarea
-            label="Content (Markdown)"
-            value={markdown}
-            onChange={(e) => setMarkdown(e.target.value)}
-            rows={16}
-            className="font-mono text-[13px]"
-            placeholder="# Title&#10;&#10;Paste or write the policy in Markdown…"
-          />
-          <p className="text-xs text-faint">Markdown is rendered to safe HTML on save. Save the draft, then use <b>Preview</b> to see the rendered page before publishing.</p>
-          {error && <p className="rounded-xl bg-danger-bg px-4 py-2 text-sm text-danger">{error}</p>}
-          <div className="flex gap-3">
-            <Button variant="outline" className="flex-1" onClick={() => setEditorOpen(false)}>Cancel</Button>
-            <Button className="flex-1" onClick={saveVersion} disabled={saving || !markdown.trim() || !effectiveDate}>
-              {saving ? 'Saving…' : editingNumber == null ? 'Save draft' : 'Save changes'}
-            </Button>
+          <div className="flex flex-1 flex-col">
+            <label className="mb-1.5 block text-sm font-medium text-ink">Policy content</label>
+            <textarea
+              value={markdown}
+              onChange={(e) => setMarkdown(e.target.value)}
+              placeholder={'Write or paste the full policy here.\n\nUse a blank line between paragraphs. Optional formatting: "# Heading", "## Sub-heading", "- bullet", "**bold**", "[link](https://…)".'}
+              className="min-h-[58vh] flex-1 w-full resize-y rounded-xl border border-line bg-white p-4 text-[14px] leading-relaxed text-ink outline-none focus:border-primary"
+            />
+            <p className="mt-2 text-xs text-faint">Plain text works as-is. Markdown formatting is rendered to a safe web page on save — use <b>Preview</b> to check it before publishing.</p>
           </div>
+          {error && <p className="rounded-xl bg-danger-bg px-4 py-2 text-sm text-danger">{error}</p>}
         </div>
-      </Modal>
+      </Drawer>
 
       {/* ─── Settings ─── */}
       <Modal open={metaOpen} onClose={() => setMetaOpen(false)} title="Policy settings">
