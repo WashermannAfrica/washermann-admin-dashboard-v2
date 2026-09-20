@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ScrollText, Plus, FileText, Clock } from 'lucide-react';
+import { ScrollText, Plus, FileText, Clock, Sparkles } from 'lucide-react';
 import { PageKpi, StatBlock } from '@/components/ui/PageKpi';
 import { Section } from '@/components/ui/Section';
 import { Chip } from '@/components/ui/Chip';
@@ -35,16 +35,37 @@ export default function PoliciesListPage() {
   const [audiences, setAudiences] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
+  const [seedAvailable, setSeedAvailable] = useState(false);
+  const [seeding, setSeeding] = useState(false);
+
   const load = useCallback(() => {
     setLoading(true);
-    api
-      .get<ApiResponse<Policy[]>>('/admin/policies')
-      .then((res) => setPolicies(res.data.data))
+    Promise.all([
+      api.get<ApiResponse<Policy[]>>('/admin/policies'),
+      api.get<ApiResponse<{ available: boolean; total: number; remaining: string[] }>>('/admin/policies/seed/status'),
+    ])
+      .then(([pRes, sRes]) => {
+        setPolicies(pRes.data.data);
+        setSeedAvailable(sRes.data.data.available);
+      })
       .catch((err) => setError(apiErr(err)))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(load, [load]);
+
+  async function seed() {
+    setSeeding(true);
+    setError('');
+    try {
+      await api.post('/admin/policies/seed');
+      load(); // refreshes list + status — the button hides once nothing remains
+    } catch (err) {
+      setError(apiErr(err));
+    } finally {
+      setSeeding(false);
+    }
+  }
 
   function openCreate() {
     setTitle(''); setKey(''); setKeyTouched(false); setDescription(''); setAudiences([]);
@@ -82,14 +103,25 @@ export default function PoliciesListPage() {
       </div>
 
       <Section>
-        <div className="flex items-center justify-between pb-3">
+        <div className="flex items-center justify-between gap-3 pb-3">
           <p className="text-sm text-faint">Upload, create and version the policies shown on the website and in the signup consent links.</p>
-          <button
-            onClick={openCreate}
-            className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-primary px-4 text-[13px] font-semibold text-white hover:bg-primary-dark"
-          >
-            <Plus size={14} /> New policy
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {seedAvailable && (
+              <button
+                onClick={seed}
+                disabled={seeding}
+                className="flex h-9 items-center gap-1.5 rounded-full border border-primary px-4 text-[13px] font-semibold text-primary hover:bg-mint-soft disabled:opacity-60"
+              >
+                <Sparkles size={14} /> {seeding ? 'Seeding…' : 'Seed initial policies'}
+              </button>
+            )}
+            <button
+              onClick={openCreate}
+              className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-4 text-[13px] font-semibold text-white hover:bg-primary-dark"
+            >
+              <Plus size={14} /> New policy
+            </button>
+          </div>
         </div>
 
         {error && !createOpen && <p className="mb-3 rounded-xl bg-danger-bg px-4 py-2 text-sm text-danger">{error}</p>}

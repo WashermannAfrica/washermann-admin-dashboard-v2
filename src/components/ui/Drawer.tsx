@@ -10,12 +10,15 @@ export function Drawer({
   title,
   children,
   footer,
+  widthClass = 'max-w-md',
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  /** Tailwind max-width for the panel (e.g. 'max-w-2xl'). Defaults to 'max-w-md'. */
+  widthClass?: string;
 }) {
   return (
     <div className={cn('fixed inset-0 z-50', open ? '' : 'pointer-events-none')}>
@@ -25,7 +28,8 @@ export function Drawer({
       />
       <div
         className={cn(
-          'absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-white shadow-2xl transition-transform duration-300 sm:rounded-l-3xl',
+          'absolute right-0 top-0 flex h-full w-full flex-col bg-white shadow-2xl transition-transform duration-300 sm:rounded-l-3xl',
+          widthClass,
           open ? 'translate-x-0' : 'translate-x-full',
         )}
       >
