@@ -25,7 +25,7 @@ export default function CataloguePage() {
   const [catModal, setCatModal] = useState<{ open: boolean; edit?: CatalogueCategory }>({ open: false });
   const [catForm, setCatForm] = useState({ name: '', description: '', sortOrder: '' });
   const [itemModal, setItemModal] = useState<{ open: boolean; edit?: CatalogueItem; categoryId?: string }>({ open: false });
-  const [itemForm, setItemForm] = useState({ name: '', categoryId: '', isEveryday: false });
+  const [itemForm, setItemForm] = useState({ name: '', categoryId: '', isEveryday: false, floorPriceNgn: '' });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -76,7 +76,7 @@ export default function CataloguePage() {
 
   // ─── item modal ──────────────────────────────────────────────────────────────
   function openItem(opts: { edit?: CatalogueItem; categoryId?: string }) {
-    setItemForm({ name: opts.edit?.name ?? '', categoryId: opts.edit?.categoryId ?? opts.categoryId ?? categories[0]?.id ?? '', isEveryday: opts.edit?.isEveryday ?? false });
+    setItemForm({ name: opts.edit?.name ?? '', categoryId: opts.edit?.categoryId ?? opts.categoryId ?? categories[0]?.id ?? '', isEveryday: opts.edit?.isEveryday ?? false, floorPriceNgn: opts.edit?.floorPriceNgn != null ? String(opts.edit.floorPriceNgn) : '' });
     setFormError('');
     setItemModal({ open: true, edit: opts.edit, categoryId: opts.categoryId });
   }
@@ -84,7 +84,12 @@ export default function CataloguePage() {
     e.preventDefault();
     setFormError('');
     setSaving(true);
-    const body = { categoryId: itemForm.categoryId, name: itemForm.name.trim(), isEveryday: itemForm.isEveryday };
+    const body = {
+      categoryId: itemForm.categoryId,
+      name: itemForm.name.trim(),
+      isEveryday: itemForm.isEveryday,
+      floorPriceNgn: itemForm.floorPriceNgn.trim() === '' ? null : Number(itemForm.floorPriceNgn),
+    };
     try {
       if (itemModal.edit) await api.patch(`/catalogue/items/${itemModal.edit.id}`, body);
       else await api.post('/catalogue/items', body);
@@ -192,6 +197,10 @@ export default function CataloguePage() {
           <SelectField label="Category" required value={itemForm.categoryId} onChange={(e) => setItemForm((f) => ({ ...f, categoryId: e.target.value }))}>
             {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </SelectField>
+          <div>
+            <Input label="Base / floor price (₦)" type="number" min={0} step="0.01" placeholder="Optional — e.g. 500" value={itemForm.floorPriceNgn} onChange={(e) => setItemForm((f) => ({ ...f, floorPriceNgn: e.target.value }))} />
+            <p className="mt-1 text-xs text-faint">Paid when a vendor hasn&apos;t set a price for this item, so a completed order never earns ₦0. Leave blank for none.</p>
+          </div>
           <label className="flex items-center gap-3 text-sm text-ink">
             <input type="checkbox" checked={itemForm.isEveryday} onChange={(e) => setItemForm((f) => ({ ...f, isEveryday: e.target.checked }))} className="h-4 w-4 rounded border-line accent-[#13C490]" />
             Eligible for Wash &amp; Fold bags (everyday item)

@@ -447,6 +447,7 @@ export type CatalogueItem = {
   isAvailable: boolean;
   priceNgn: number | null;
   priceWp: number | null;
+  floorPriceNgn: number | null;
 };
 
 export type VendorDocument = {
