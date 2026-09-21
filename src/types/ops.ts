@@ -89,7 +89,7 @@ export type Rep = {
 // ─── Referrals ────────────────────────────────────────────────────────────────
 export type ReferrerType = 'sales_rep' | 'rep' | 'customer' | 'vendor';
 export type ReferredType = 'customer' | 'vendor';
-export type ReferralStatus = 'pending' | 'available' | 'paid' | 'rejected';
+export type ReferralStatus = 'pending' | 'available' | 'paid' | 'rejected' | 'clawed_back';
 
 export type Referral = {
   id: string;
