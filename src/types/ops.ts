@@ -502,5 +502,7 @@ export type VendorPayout = {
   approvedAt: string | null;
   completedAt: string | null;
   failureReason: string | null;
+  heldReason?: string | null;
+  autoReleaseAt?: string | null;
   createdAt: string;
 };
