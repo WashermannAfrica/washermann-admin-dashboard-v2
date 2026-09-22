@@ -446,6 +446,7 @@ export type CatalogueItem = {
   slug: string;
   svgIcon: string | null;
   isEveryday: boolean;
+  dryCleanEligible: boolean;
   isActive: boolean;
   isAvailable: boolean;
   priceNgn: number | null;

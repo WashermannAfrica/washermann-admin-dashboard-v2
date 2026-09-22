@@ -25,7 +25,7 @@ export default function CataloguePage() {
   const [catModal, setCatModal] = useState<{ open: boolean; edit?: CatalogueCategory }>({ open: false });
   const [catForm, setCatForm] = useState({ name: '', description: '', sortOrder: '' });
   const [itemModal, setItemModal] = useState<{ open: boolean; edit?: CatalogueItem; categoryId?: string }>({ open: false });
-  const [itemForm, setItemForm] = useState({ name: '', categoryId: '', isEveryday: false, floorPriceNgn: '' });
+  const [itemForm, setItemForm] = useState({ name: '', categoryId: '', isEveryday: false, dryCleanEligible: false, floorPriceNgn: '' });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -76,7 +76,7 @@ export default function CataloguePage() {
 
   // ─── item modal ──────────────────────────────────────────────────────────────
   function openItem(opts: { edit?: CatalogueItem; categoryId?: string }) {
-    setItemForm({ name: opts.edit?.name ?? '', categoryId: opts.edit?.categoryId ?? opts.categoryId ?? categories[0]?.id ?? '', isEveryday: opts.edit?.isEveryday ?? false, floorPriceNgn: opts.edit?.floorPriceNgn != null ? String(opts.edit.floorPriceNgn) : '' });
+    setItemForm({ name: opts.edit?.name ?? '', categoryId: opts.edit?.categoryId ?? opts.categoryId ?? categories[0]?.id ?? '', isEveryday: opts.edit?.isEveryday ?? false, dryCleanEligible: opts.edit?.dryCleanEligible ?? false, floorPriceNgn: opts.edit?.floorPriceNgn != null ? String(opts.edit.floorPriceNgn) : '' });
     setFormError('');
     setItemModal({ open: true, edit: opts.edit, categoryId: opts.categoryId });
   }
@@ -88,6 +88,7 @@ export default function CataloguePage() {
       categoryId: itemForm.categoryId,
       name: itemForm.name.trim(),
       isEveryday: itemForm.isEveryday,
+      dryCleanEligible: itemForm.dryCleanEligible,
       floorPriceNgn: itemForm.floorPriceNgn.trim() === '' ? null : Number(itemForm.floorPriceNgn),
     };
     try {
@@ -204,6 +205,10 @@ export default function CataloguePage() {
           <label className="flex items-center gap-3 text-sm text-ink">
             <input type="checkbox" checked={itemForm.isEveryday} onChange={(e) => setItemForm((f) => ({ ...f, isEveryday: e.target.checked }))} className="h-4 w-4 rounded border-line accent-[#13C490]" />
             Eligible for Wash &amp; Fold bags (everyday item)
+          </label>
+          <label className="flex items-center gap-3 text-sm text-ink">
+            <input type="checkbox" checked={itemForm.dryCleanEligible} onChange={(e) => setItemForm((f) => ({ ...f, dryCleanEligible: e.target.checked }))} className="h-4 w-4 rounded border-line accent-[#13C490]" />
+            Dry cleaning applicable to this item
           </label>
           {formError && <p className="rounded-xl bg-danger-bg px-4 py-2 text-sm text-danger">{formError}</p>}
           <div className="flex gap-3 pt-1"><Button type="button" variant="outline" className="flex-1" onClick={() => setItemModal({ open: false })}>Cancel</Button><Button type="submit" className="flex-1" loading={saving}>Save</Button></div>
