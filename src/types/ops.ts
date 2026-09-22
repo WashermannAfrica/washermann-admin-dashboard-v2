@@ -392,6 +392,9 @@ export type Vendor = {
   rating: number;
   ratingCount: number;
   logoUrl: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  locationUpdatedAt: string | null;
   verifiedAt: string | null;
   createdAt: string;
   user?: { id: string; fullName: string; email: string | null; phone: string | null };

@@ -26,6 +26,7 @@ import {
   Headset,
   FileText,
   ShieldAlert,
+  Truck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -62,6 +63,7 @@ const MAIN: NavItem[] = [
 ];
 
 const OTHERS: NavItem[] = [
+  { label: 'Transport', href: '/transport', icon: <Truck size={16} /> },
   { label: 'Help',     href: '/help',     icon: <CircleHelp size={16} /> },
   { label: 'Settings', href: '/settings', icon: <Settings size={16} /> },
 ];
