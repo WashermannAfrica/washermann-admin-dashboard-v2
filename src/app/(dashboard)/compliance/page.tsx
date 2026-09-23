@@ -9,6 +9,7 @@ import { Chip } from '@/components/ui/Chip';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { Input, Textarea, SelectField } from '@/components/ui/Input';
+import { EntitySearchSelect } from '@/components/ui/EntitySearchSelect';
 import { RowMenu } from '@/components/ui/RowMenu';
 import { Spinner } from '@/components/ui/Spinner';
 import { api } from '@/lib/api';
@@ -31,8 +32,15 @@ type AbandonedOrder = {
   disposalNote: string | null; uncollectedNoticeCount: number; createdAt: string;
 };
 
+type VendorLite = { id: string; businessName: string | null; user?: { fullName?: string; email?: string } };
+type RepLite = { id: string; phone?: string | null; user?: { fullName?: string; email?: string } };
+
 const day = (s: string | null) => (s ? formatDate(s) : '—');
 const wp = (n: number) => `${Number(n || 0).toLocaleString()} WP`;
+const vendorLabel = (v: VendorLite) => v.businessName || v.user?.fullName || v.id;
+const vendorSub = (v: VendorLite) => (v.businessName && v.user?.fullName ? v.user.fullName : v.user?.email);
+const repLabel = (r: RepLite) => r.user?.fullName || r.id;
+const repSub = (r: RepLite) => r.phone || r.user?.email || undefined;
 
 export default function CompliancePage() {
   const [tab, setTab] = useState('Deductions');
@@ -105,7 +113,17 @@ function DeductionsTab() {
       <Modal open={raise} onClose={() => setRaise(false)} title="Raise earnings deduction">
         <div className="space-y-4">
           <p className="text-sm text-faint">The vendor is notified and given the response window before the amount is debited. You can also start this from a vendor’s detail page.</p>
-          <Input label="Vendor ID" value={form.vendorId} onChange={(e) => setForm((f) => ({ ...f, vendorId: e.target.value }))} placeholder="vendor uuid" required />
+          <EntitySearchSelect<VendorLite>
+            label="Vendor"
+            required
+            endpoint="/vendors"
+            value={form.vendorId}
+            onChange={(id) => setForm((f) => ({ ...f, vendorId: id }))}
+            getId={(v) => v.id}
+            getLabel={vendorLabel}
+            getSub={vendorSub}
+            placeholder="Search by business or owner name…"
+          />
           <Input label="Amount (WP)" type="number" min={1} value={form.amountWp} onChange={(e) => setForm((f) => ({ ...f, amountWp: e.target.value }))} required />
           <Textarea label="Reason" rows={2} value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Substantiated claim detail + order ref" />
           <div className="flex gap-3">
@@ -191,11 +209,35 @@ function SuspensionsTab() {
 
       <Modal open={issue} onClose={() => setIssue(false)} title="Issue suspension">
         <div className="space-y-4">
-          <SelectField label="Subject type" value={form.subjectType} onChange={(e) => setForm((f) => ({ ...f, subjectType: e.target.value as 'vendor' | 'rep' }))}>
+          <SelectField label="Subject type" value={form.subjectType} onChange={(e) => setForm((f) => ({ ...f, subjectType: e.target.value as 'vendor' | 'rep', subjectId: '' }))}>
             <option value="vendor">Vendor</option>
             <option value="rep">Rep</option>
           </SelectField>
-          <Input label={`${form.subjectType === 'vendor' ? 'Vendor' : 'Rep'} ID`} value={form.subjectId} onChange={(e) => setForm((f) => ({ ...f, subjectId: e.target.value }))} placeholder="uuid" required />
+          {form.subjectType === 'vendor' ? (
+            <EntitySearchSelect<VendorLite>
+              label="Vendor"
+              required
+              endpoint="/vendors"
+              value={form.subjectId}
+              onChange={(id) => setForm((f) => ({ ...f, subjectId: id }))}
+              getId={(v) => v.id}
+              getLabel={vendorLabel}
+              getSub={vendorSub}
+              placeholder="Search by business or owner name…"
+            />
+          ) : (
+            <EntitySearchSelect<RepLite>
+              label="Rep"
+              required
+              endpoint="/reps"
+              value={form.subjectId}
+              onChange={(id) => setForm((f) => ({ ...f, subjectId: id }))}
+              getId={(r) => r.id}
+              getLabel={repLabel}
+              getSub={repSub}
+              placeholder="Search by rep name…"
+            />
+          )}
           <Textarea label="Reason" rows={2} value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} />
           <label className="flex items-center gap-2 text-sm text-body">
             <input type="checkbox" checked={form.immediate} onChange={(e) => setForm((f) => ({ ...f, immediate: e.target.checked }))} className="h-4 w-4 rounded border-line" />
