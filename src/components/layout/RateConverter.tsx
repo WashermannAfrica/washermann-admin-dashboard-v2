@@ -16,8 +16,13 @@ const LS_WP = 'wm_conv_wp';
 const readLS = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
 const writeLS = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } };
 
+// Pretty, comma-grouped — for read-only captions only (never for <input type=number>).
 const fmt = (n: number) =>
   Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '';
+
+// Plain numeric string (no thousands separators) — safe as an <input type=number> value.
+const num2 = (n: number) =>
+  Number.isFinite(n) ? String(Math.round(n * 100) / 100) : '';
 
 export function RateConverter() {
   const [open, setOpen] = useState(false);
@@ -66,28 +71,34 @@ export function RateConverter() {
 
   const nairaPerWp = mode === 'spend' ? spendNairaPerWp : payoutNairaPerWp;
 
-  // Recompute ₦ whenever WP or the active rate changes.
+  // Recompute ₦ from the current WP only when the rate/mode changes — NOT on every
+  // WP keystroke, so editing the ₦ field is never overwritten mid-type.
   useEffect(() => {
     if (nairaPerWp == null) return;
     const w = parseFloat(wp);
-    setNgn(wp === '' || !Number.isFinite(w) ? '' : fmt(w * nairaPerWp));
-  }, [wp, nairaPerWp]);
+    setNgn(wp === '' || !Number.isFinite(w) ? '' : num2(w * nairaPerWp));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nairaPerWp]);
 
   function onWp(v: string) {
     setWp(v);
     writeLS(LS_WP, v);
+    if (nairaPerWp == null) return;
+    const w = parseFloat(v);
+    setNgn(v === '' || !Number.isFinite(w) ? '' : num2(w * nairaPerWp));
   }
   function onNgn(v: string) {
     setNgn(v);
+    if (nairaPerWp == null || nairaPerWp <= 0) return;
     const n = parseFloat(v);
-    if (nairaPerWp && nairaPerWp > 0 && Number.isFinite(n)) {
-      const w = String(Math.round((n / nairaPerWp) * 100) / 100);
-      setWp(w);
-      writeLS(LS_WP, w);
-    } else if (v === '') {
+    if (v === '' || !Number.isFinite(n)) {
       setWp('');
       writeLS(LS_WP, '');
+      return;
     }
+    const w = num2(n / nairaPerWp);
+    setWp(w);
+    writeLS(LS_WP, w);
   }
   function toggleOpen() {
     setOpen((o) => { writeLS(LS_OPEN, o ? '0' : '1'); return !o; });
