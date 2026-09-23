@@ -1,12 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Banknote, CircleDollarSign, Users, Building2, Check } from 'lucide-react';
+import { Banknote, CircleDollarSign, Users, Building2, Check, Pause, Play } from 'lucide-react';
 import { Panel } from '@/components/ui/Section';
 import { DataTable, Column } from '@/components/ui/DataTable';
 import { Chip } from '@/components/ui/Chip';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
+import { Input } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 import { api } from '@/lib/api';
 import { apiErr } from '@/lib/apiError';
@@ -38,6 +39,8 @@ export default function FinancialsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [approving, setApproving] = useState<VendorPayout | null>(null);
+  const [holding, setHolding] = useState<VendorPayout | null>(null);
+  const [holdReason, setHoldReason] = useState('');
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -67,6 +70,32 @@ export default function FinancialsPage() {
     }
   }
 
+  async function hold() {
+    if (!holding) return;
+    setBusy(true);
+    try {
+      await api.post(`/payouts/${holding.id}/hold`, { reason: holdReason.trim() });
+      setHolding(null); setHoldReason('');
+      load();
+    } catch (err) {
+      setError(apiErr(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function release(p: VendorPayout) {
+    setBusy(true);
+    try {
+      await api.post(`/payouts/${p.id}/release`);
+      load();
+    } catch (err) {
+      setError(apiErr(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const pendingCount = payouts.filter((p) => p.status === 'pending').length;
 
   const columns: Column<VendorPayout>[] = [
@@ -78,7 +107,12 @@ export default function FinancialsPage() {
     {
       key: 'actions', header: '', render: (p) =>
         p.status === 'pending' ? (
-          <div className="flex justify-end"><Button size="sm" variant="soft" onClick={() => setApproving(p)} disabled={busy}><Check size={13} /> Approve</Button></div>
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="soft" onClick={() => setApproving(p)} disabled={busy}><Check size={13} /> Approve</Button>
+            <Button size="sm" variant="outline" onClick={() => { setHolding(p); setHoldReason(''); }} disabled={busy}><Pause size={13} /> Hold</Button>
+          </div>
+        ) : p.status === 'held' ? (
+          <div className="flex justify-end"><Button size="sm" variant="soft" onClick={() => release(p)} disabled={busy}><Play size={13} /> Release</Button></div>
         ) : <span className="text-xs text-faint">{p.failureReason ?? '—'}</span>,
     },
   ];
@@ -115,6 +149,19 @@ export default function FinancialsPage() {
           <div className="flex gap-3">
             <Button variant="outline" className="flex-1" onClick={() => setApproving(null)}>Cancel</Button>
             <Button className="flex-1" loading={busy} onClick={approve}>Approve &amp; pay</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={!!holding} onClose={() => setHolding(null)} title={`Withhold payout · ${holding ? naira(holding.nairaAmount) : ''}`}>
+        <div className="space-y-4">
+          <p className="text-sm text-body">
+            Withhold this payout for investigation. The vendor is notified, and if it isn’t substantiated it auto-releases after the configured window.
+          </p>
+          <Input label="Reason" value={holdReason} onChange={(e) => setHoldReason(e.target.value)} placeholder="e.g. Open damage claim on order WM-3K9F2" required />
+          <div className="flex gap-3">
+            <Button variant="outline" className="flex-1" onClick={() => setHolding(null)}>Cancel</Button>
+            <Button className="flex-1" loading={busy} disabled={holdReason.trim().length < 3} onClick={hold}>Withhold</Button>
           </div>
         </div>
       </Modal>

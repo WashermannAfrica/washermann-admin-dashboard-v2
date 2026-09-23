@@ -25,6 +25,8 @@ import {
   ScrollText,
   Headset,
   FileText,
+  ShieldAlert,
+  Truck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -49,6 +51,7 @@ const MAIN: NavItem[] = [
   { label: 'Catalogue',     href: '/catalogue',     icon: <Shirt size={16} /> },
   { label: 'Customers',     href: '/users',         icon: <Users size={16} /> },
   { label: 'Disputes',      href: '/disputes',      icon: <Scale size={16} /> },
+  { label: 'Compliance',    href: '/compliance',    icon: <ShieldAlert size={16} /> },
   { label: 'Live Support',  href: '/support',       icon: <Headset size={16} /> },
   { label: 'Financials',    href: '/financials',    icon: <Banknote size={16} /> },
   { label: 'Washer-points', href: '/washer-points', icon: <CircleDollarSign size={16} /> },
@@ -60,6 +63,7 @@ const MAIN: NavItem[] = [
 ];
 
 const OTHERS: NavItem[] = [
+  { label: 'Transport', href: '/transport', icon: <Truck size={16} /> },
   { label: 'Help',     href: '/help',     icon: <CircleHelp size={16} /> },
   { label: 'Settings', href: '/settings', icon: <Settings size={16} /> },
 ];
