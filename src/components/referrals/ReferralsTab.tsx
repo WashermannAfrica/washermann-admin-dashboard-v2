@@ -111,7 +111,11 @@ export function ReferralsTab() {
         columns={columns}
         rows={rows}
         searchPlaceholder="Search by code"
-        filters={[{ label: 'Status', options: [] }, { label: 'Referrer', options: [] }, { label: 'Referred', options: [] }]}
+        filters={[
+          { label: 'Status', options: ['pending', 'available', 'paid', 'rejected', 'clawed_back'] },
+          { label: 'Referrer', options: ['customer', 'vendor', 'rep', 'sales_rep'] },
+          { label: 'Referred', options: ['customer', 'vendor'] },
+        ]}
         pageSize={12}
         emptyText="No referrals yet."
       />
