@@ -9,7 +9,7 @@ import { Chip } from '@/components/ui/Chip';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
-import { Textarea } from '@/components/ui/Input';
+import { Input, Textarea } from '@/components/ui/Input';
 import { Spinner } from '@/components/ui/Spinner';
 import { Stars } from '@/components/ui/Stars';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -46,6 +46,9 @@ export default function WashermanDetailPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState('Orders');
+  const [locLat, setLocLat] = useState('');
+  const [locLng, setLocLng] = useState('');
+  const [savingLoc, setSavingLoc] = useState(false);
   const [kycOpen, setKycOpen] = useState(false);
   const [openProposals, setOpenProposals] = useState<Set<string>>(new Set());
   const toggleProposal = (pid: string) =>
@@ -61,6 +64,12 @@ export default function WashermanDetailPage() {
   const [rejectTarget, setRejectTarget] = useState<{ p: VendorPricingProposal; item?: VendorPricingItem } | null>(null);
 
   const [areas, setAreas] = useState<Area[]>([]);
+  const [referral, setReferral] = useState<{
+    code: string | null;
+    counts: { pending: number; available: number; paid: number };
+    payout: { pending: number; available: number; paid: number };
+    referrals: Array<{ referredType: string; status: string }>;
+  } | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -91,6 +100,32 @@ export default function WashermanDetailPage() {
   }, [id]);
 
   useEffect(load, [load]);
+
+  // Referral summary for this vendor (their own code + who they've referred).
+  useEffect(() => {
+    const uid = vendor?.userId;
+    if (!uid) return;
+    api.get<ApiResponse<typeof referral>>(`/referrals/user/${uid}`)
+      .then((r) => setReferral(r.data.data))
+      .catch(() => setReferral(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vendor?.userId]);
+
+  useEffect(() => {
+    if (vendor) {
+      setLocLat(vendor.latitude != null ? String(vendor.latitude) : '');
+      setLocLng(vendor.longitude != null ? String(vendor.longitude) : '');
+    }
+  }, [vendor]);
+
+  async function saveLocation() {
+    setSavingLoc(true);
+    setError('');
+    try {
+      await api.patch(`/vendors/${id}`, { latitude: Number(locLat), longitude: Number(locLng) });
+      load();
+    } catch (e) { setError(apiErr(e)); } finally { setSavingLoc(false); }
+  }
 
   async function verifyVendor() { setBusy(true); try { await api.post(`/vendors/${id}/verify`, { decision: 'verified' }); load(); } catch (e) { setError(apiErr(e)); } finally { setBusy(false); } }
   async function rejectVendor() { setBusy(true); try { await api.post(`/vendors/${id}/verify`, { decision: 'rejected', rejectionReason: reason.trim() || undefined }); setRejectingVendor(false); setReason(''); load(); } catch (e) { setError(apiErr(e)); } finally { setBusy(false); } }
@@ -205,6 +240,54 @@ export default function WashermanDetailPage() {
         ) : (
           <p className="mt-2 text-sm text-faint">No areas assigned yet.</p>
         )}
+      </div>
+
+      {/* Shop location for distance-based transport */}
+      <div className="mt-4 rounded-2xl border border-line bg-white p-5">
+        <h2 className="text-sm font-bold text-ink">Shop location</h2>
+        <p className="mt-1 text-xs text-faint">
+          Used for distance-based transport pricing.{' '}
+          {vendor.locationUpdatedAt
+            ? `Set ${formatDate(vendor.locationUpdatedAt)}.`
+            : 'Not set — orders in this vendor’s area can’t be priced until at least one vendor is located.'}
+        </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <Input label="Latitude" type="number" step="any" value={locLat} onChange={(e) => setLocLat(e.target.value)} placeholder="6.4550" />
+          <Input label="Longitude" type="number" step="any" value={locLng} onChange={(e) => setLocLng(e.target.value)} placeholder="3.3841" />
+          <div className="flex items-end">
+            <Button onClick={saveLocation} loading={savingLoc} disabled={!locLat || !locLng}>Save location</Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Referrals — this vendor's own code + who they've brought in */}
+      <div className="mt-4 rounded-2xl border border-line bg-white p-5">
+        <h2 className="text-sm font-bold text-ink">Referrals</h2>
+        <p className="mt-1 text-xs text-faint">This washerman’s referral code and the accounts they’ve referred.</p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-4">
+          <div className="rounded-xl bg-section p-3">
+            <p className="text-[11px] uppercase tracking-wide text-faint">Referral code</p>
+            <p className="mt-1 font-mono text-sm font-bold text-ink">{referral?.code ?? '—'}</p>
+          </div>
+          <div className="rounded-xl bg-section p-3">
+            <p className="text-[11px] uppercase tracking-wide text-faint">Washermen referred</p>
+            <p className="mt-1 text-lg font-bold text-ink">
+              {referral ? referral.referrals.filter((r) => r.referredType === 'vendor').length : 0}
+            </p>
+          </div>
+          <div className="rounded-xl bg-section p-3">
+            <p className="text-[11px] uppercase tracking-wide text-faint">Available to earn</p>
+            <p className="mt-1 text-lg font-bold text-forest">{wp(referral?.payout.available ?? 0)}</p>
+          </div>
+          <div className="rounded-xl bg-section p-3">
+            <p className="text-[11px] uppercase tracking-wide text-faint">Paid out</p>
+            <p className="mt-1 text-lg font-bold text-ink">{wp(referral?.payout.paid ?? 0)}</p>
+          </div>
+        </div>
+        <p className="mt-3 text-xs text-faint">
+          Total referred: {referral ? referral.referrals.length : 0} · Awaiting approval: {referral?.counts.pending ?? 0}.{' '}
+          Manage individual rewards under Referrals.
+        </p>
       </div>
 
       <HeroTabs tabs={TABS} active={tab} onChange={setTab} />

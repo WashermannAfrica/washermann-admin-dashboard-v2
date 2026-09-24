@@ -89,7 +89,7 @@ export type Rep = {
 // ─── Referrals ────────────────────────────────────────────────────────────────
 export type ReferrerType = 'sales_rep' | 'rep' | 'customer' | 'vendor';
 export type ReferredType = 'customer' | 'vendor';
-export type ReferralStatus = 'pending' | 'available' | 'paid' | 'rejected';
+export type ReferralStatus = 'pending' | 'available' | 'paid' | 'rejected' | 'clawed_back';
 
 export type Referral = {
   id: string;
@@ -392,6 +392,9 @@ export type Vendor = {
   rating: number;
   ratingCount: number;
   logoUrl: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  locationUpdatedAt: string | null;
   verifiedAt: string | null;
   createdAt: string;
   user?: { id: string; fullName: string; email: string | null; phone: string | null };
@@ -443,10 +446,12 @@ export type CatalogueItem = {
   slug: string;
   svgIcon: string | null;
   isEveryday: boolean;
+  dryCleanEligible: boolean;
   isActive: boolean;
   isAvailable: boolean;
   priceNgn: number | null;
   priceWp: number | null;
+  floorPriceNgn: number | null;
 };
 
 export type VendorDocument = {
@@ -501,5 +506,7 @@ export type VendorPayout = {
   approvedAt: string | null;
   completedAt: string | null;
   failureReason: string | null;
+  heldReason?: string | null;
+  autoReleaseAt?: string | null;
   createdAt: string;
 };
