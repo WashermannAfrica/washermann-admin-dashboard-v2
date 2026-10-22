@@ -85,12 +85,16 @@ export default function BlogEditorPage() {
   useEffect(() => { dirtyRef.current = dirty; }, [dirty]);
 
   const editable = post?.status === 'draft' || post?.status === 'published';
-  const canReview =
-    post?.status === 'in_review' &&
-    !!me &&
-    me.id !== post.authorUserId &&
-    me.id !== post.submittedBy;
-
+const canReview =
+  post?.status === 'in_review' &&
+  !!me &&
+  (
+    me.roles.includes('admin') ||
+    (
+      me.id !== post.authorUserId &&
+      me.id !== post.submittedBy
+    )
+  );
   function patch(update: Partial<Draft>) {
     setDraft((d) => (d ? { ...d, ...update } : d));
     setDirty(true);
