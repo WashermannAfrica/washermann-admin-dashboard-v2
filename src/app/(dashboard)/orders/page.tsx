@@ -17,6 +17,10 @@ import type { AdminAnalytics, Order, OrderTimelineEntry } from '@/types/ops';
 
 const naira = (n: number | null) => `₦${Number(n ?? 0).toLocaleString()}`;
 const pretty = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+const prettyFlow = (f?: string) =>
+  f === 'logistics_delivery' ? 'Logistics · Delivery'
+  : f === 'logistics_collect' ? 'Logistics · Collect'
+  : f ? pretty(f) : '—';
 const TERMINAL = ['completed', 'cancelled', 'delivered'];
 
 export default function OrdersPage() {
@@ -35,6 +39,7 @@ export default function OrdersPage() {
   const [sort, setSort] = useState<{ by: string; dir: 'ASC' | 'DESC' } | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [service, setService] = useState<string | null>(null);
+  const [flow, setFlow] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -42,13 +47,14 @@ export default function OrdersPage() {
     if (search) params.set('search', search);
     if (status) params.set('status', status);
     if (service) params.set('serviceType', service);
+    if (flow) params.set('flow', flow);
     if (sort) { params.set('sortBy', sort.by); params.set('sortDir', sort.dir); }
     api
       .get<Paginated<Order>>(`/orders?${params.toString()}`)
       .then((res) => { setOrders(res.data.data); setTotal(res.data.meta.total); })
       .catch((err) => setError(apiErr(err)))
       .finally(() => setLoading(false));
-  }, [search, page, status, service, sort]);
+  }, [search, page, status, service, flow, sort]);
 
   useEffect(load, [load]);
 
@@ -98,6 +104,7 @@ export default function OrdersPage() {
     },
     { key: 'company', header: 'Company', value: (o) => o.companyName ?? '', render: (o) => <span className="text-body">{o.companyName ?? '—'}</span> },
     { key: 'amount', header: 'Amount', value: (o) => o.totalWP, render: (o) => <span className="text-ink">{o.totalWP} WP <span className="text-xs text-faint">({naira(o.nairaEquivalentSnapshot)})</span></span> },
+    { key: 'type', header: 'Type', value: (o) => o.flow ?? '', render: (o) => <span className="text-body">{prettyFlow(o.flow)}</span> },
     { key: 'date', header: 'Date', sortable: true, value: (o) => o.createdAt, render: (o) => <span className="text-body">{formatDate(o.createdAt)}</span> },
     { key: 'status', header: 'Status', sortable: true, value: (o) => o.status, render: (o) => <Chip tone={statusTone(o.status)}>{pretty(o.status)}</Chip> },
     { key: 'view', header: '', render: (o) => <span onClick={() => setSelected(o)} className="cursor-pointer font-medium text-primary underline-offset-2 hover:underline">View Detail</span> },
@@ -165,11 +172,13 @@ export default function OrdersPage() {
           onFilter={(label, v) => {
             if (label === 'Status') setStatus(v);
             if (label === 'Service') setService(v);
+            if (label === 'Type') setFlow(v);
             setPage(1);
           }}
           filters={[
             { label: 'Status', options: ['paid', 'broadcasting_rep', 'rep_assigned', 'broadcasting_vendor', 'vendor_assigned', 'scheduled', 'picked_up', 'with_vendor', 'in_progress', 'ready_for_delivery', 'out_for_delivery', 'delivered', 'completed', 'cancelled', 'disputed'] },
             { label: 'Service', options: ['wash_fold', 'wash_iron'] },
+            { label: 'Type', options: ['wash_fold', 'wash_iron', 'bundle', 'logistics', 'logistics_delivery', 'logistics_collect'] },
           ]}
           pageSize={10}
           emptyText="No orders yet."
