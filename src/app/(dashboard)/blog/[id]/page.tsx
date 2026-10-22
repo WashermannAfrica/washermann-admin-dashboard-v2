@@ -141,8 +141,8 @@ const canReview =
     setBusy(true);
     setError('');
     try {
-      const ok = await save(); // flush pending edits first
-      if (!ok) return;
+      // const ok = await save(); // flush pending edits first
+      // if (!ok) return;
       await action();
       load();
     } catch (err) {
