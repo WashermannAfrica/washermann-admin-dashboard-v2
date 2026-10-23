@@ -14,6 +14,9 @@ import { apiErr } from '@/lib/apiError';
 import { formatDate, formatDateTime } from '@/lib/utils';
 import type { ApiResponse, Paginated } from '@/types';
 import type { AdminAnalytics, Order, OrderTimelineEntry } from '@/types/ops';
+import { Modal } from '@/components/ui/Modal';
+import { Textarea } from '@/components/ui/Input';
+import { EntitySearchSelect } from '@/components/ui/EntitySearchSelect';
 
 const naira = (n: number | null) => `₦${Number(n ?? 0).toLocaleString()}`;
 const pretty = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -40,6 +43,36 @@ export default function OrdersPage() {
   const [status, setStatus] = useState<string | null>(null);
   const [service, setService] = useState<string | null>(null);
   const [flow, setFlow] = useState<string | null>(null);
+  const [adminActionsOpen, setAdminActionsOpen] = useState(false);
+
+
+  type VendorLite = { id: string; businessName: string | null; user?: { fullName?: string; email?: string } };
+type RepLite = {
+  id: string;
+  phone?: string | null;
+  user?: { fullName?: string; email?: string };
+};
+
+type AdminActionType = 'status' | 'vendor' | 'rep';
+
+const [actionType, setActionType] = useState<AdminActionType>('status');
+const [newStatus, setNewStatus] = useState('');
+const [vendorId, setVendorId] = useState('');
+const [repId, setRepId] = useState('');
+
+const vendorLabel = (v: VendorLite) =>
+  v.businessName || v.user?.fullName || v.id;
+
+const vendorSub = (v: VendorLite) =>
+  v.businessName && v.user?.fullName
+    ? v.user.fullName
+    : v.user?.email;
+
+const repLabel = (r: RepLite) =>
+  r.user?.fullName || r.id;
+
+const repSub = (r: RepLite) =>
+  r.phone || r.user?.email || undefined;
 
   const load = useCallback(() => {
     setLoading(true);
@@ -75,6 +108,50 @@ export default function OrdersPage() {
       .catch(() => setTimeline([]));
   }, [selected]);
 
+  async function submitAdminAction() {
+  if (!selected) return;
+
+  setBusy(true);
+  setError('');
+
+  try {
+    switch (actionType) {
+      case 'status':
+        // Call the backend's admin status-update endpoint.
+        // Send { status: newStatus } using its expected method.
+         if (!newStatus) return;
+        break;
+
+      case 'vendor':
+        // Call the backend's vendor-assignment endpoint.
+        // Send { vendorId } using its expected method.
+         if (!vendorId) return;
+
+      await api.post(
+        `/assignment/orders/${selected.id}/assign/vendor/${vendorId}`,
+      );
+        break;
+
+      case 'rep':
+        // Call the backend's rep-assignment endpoint.
+        // Send { repId } using its expected method.
+         if (!repId) return;
+
+      await api.post(
+        `/assignment/orders/${selected.id}/assign/rep/${repId}`,
+      );
+        break;
+    }
+
+    setAdminActionsOpen(false);
+    setSelected(null);
+    load();
+  } catch (err) {
+    setError(apiErr(err));
+  } finally {
+    setBusy(false);
+  }
+}
   async function complete(o: Order) {
     setBusy(true);
     try {
@@ -211,7 +288,7 @@ export default function OrdersPage() {
                     <p className="mt-1 text-xs text-faint">{formatDateTime(selected.createdAt)}</p>
                   </div>
                   {!TERMINAL.includes(selected.status) && (
-                    <Button size="sm" loading={busy} onClick={() => complete(selected)}>
+                    <Button size="sm" loading={busy} onClick={() => setAdminActionsOpen(true)}>
                       <Plus size={14} /> Actions
                     </Button>
                   )}
@@ -317,6 +394,124 @@ export default function OrdersPage() {
           </div>
         </div>
       )}
+        {/* Admin actions modal */}
+          
+<Modal
+  open={adminActionsOpen}
+  onClose={() => setAdminActionsOpen(false)}
+  title="Admin Actions"
+>
+  <div className="space-y-4">
+    {/* Action type */}
+    <div>
+      <label className="mb-1.5 block text-sm font-medium text-ink">
+        Action
+      </label>
+      <select
+        value={actionType}
+        onChange={(e) =>
+          setActionType(e.target.value as AdminActionType)
+        }
+        className="w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-ink"
+      >
+        <option value="status">Update Status</option>
+        <option value="vendor">Assign Vendor</option>
+        <option value="rep">Assign Rep</option>
+      </select>
+    </div>
+
+    {/* Update status */}
+    {actionType === 'status' && (
+      <div>
+        <label className="mb-1.5 block text-sm font-medium text-ink">
+          New Status
+        </label>
+        <select
+          value={newStatus}
+          onChange={(e) => setNewStatus(e.target.value)}
+          className="w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-ink"
+        >
+          <option value="">Select status</option>
+          {[
+            'paid',
+            'broadcasting_rep',
+            'rep_assigned',
+            'broadcasting_vendor',
+            'vendor_assigned',
+            'scheduled',
+            'picked_up',
+            'with_vendor',
+            'in_progress',
+            'ready_for_delivery',
+            'out_for_delivery',
+            'delivered',
+            'completed',
+            'cancelled',
+            'disputed',
+          ].map((s) => (
+            <option key={s} value={s}>
+              {pretty(s)}
+            </option>
+          ))}
+        </select>
+      </div>
+    )}
+
+    {/* Assign vendor: same autocomplete as Compliance */}
+    {actionType === 'vendor' && (
+      <EntitySearchSelect<VendorLite>
+        label="Vendor"
+        required
+        endpoint="/vendors"
+        value={vendorId}
+        onChange={setVendorId}
+        getId={(v) => v.id}
+        getLabel={vendorLabel}
+        getSub={vendorSub}
+        placeholder="Search by business or owner name…"
+      />
+    )}
+
+    {/* Assign rep: same autocomplete as Compliance */}
+    {actionType === 'rep' && (
+      <EntitySearchSelect<RepLite>
+        label="Rep"
+        required
+        endpoint="/reps"
+        value={repId}
+        onChange={setRepId}
+        getId={(r) => r.id}
+        getLabel={repLabel}
+        getSub={repSub}
+        placeholder="Search by rep name…"
+      />
+    )}
+
+    <div className="flex gap-3 pt-2">
+      <Button
+        variant="outline"
+        className="flex-1"
+        onClick={() => setAdminActionsOpen(false)}
+      >
+        Cancel
+      </Button>
+
+      <Button
+        className="flex-1"
+        loading={busy}
+        disabled={
+          (actionType === 'status' && !newStatus) ||
+          (actionType === 'vendor' && !vendorId) ||
+          (actionType === 'rep' && !repId)
+        }
+        onClick={submitAdminAction}
+      >
+        Apply Action
+      </Button>
+    </div>
+  </div>
+</Modal>
+
     </div>
   );
 }
