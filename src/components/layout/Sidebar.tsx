@@ -62,8 +62,8 @@ const GROUPS: NavGroupDef[] = [
     items: [
       { label: 'Customers',      href: '/users',          icon: <Users size={16} /> },
       { label: 'Companies',      href: '/companies',      icon: <Building2 size={16} /> },
-      { label: 'Washermen',      href: '/washermen',      icon: <WashingMachine size={16} /> },
-      { label: 'Reps (Wash & Sales)',           href: '/reps',           icon: <UserRound size={16} /> },
+      { label: 'Washerman',      href: '/washerman',      icon: <WashingMachine size={16} /> },
+      { label: 'Reps',           href: '/reps',           icon: <UserRound size={16} /> },
       { label: 'Rep onboarding', href: '/rep-onboarding', icon: <GraduationCap size={16} /> },
       { label: 'Referrals',      href: '/referrals',      icon: <Gift size={16} /> },
     ],
@@ -74,7 +74,7 @@ const GROUPS: NavGroupDef[] = [
       { label: 'Catalogue',     href: '/catalogue',     icon: <Shirt size={16} /> },
       { label: 'Transport',     href: '/transport',     icon: <Truck size={16} /> },
       { label: 'Financials',    href: '/financials',    icon: <Banknote size={16} /> },
-      { label: 'Wash-points', href: '/wash-points', icon: <CircleDollarSign size={16} /> },
+      { label: 'Washer-points', href: '/washer-points', icon: <CircleDollarSign size={16} /> },
     ],
   },
   {
