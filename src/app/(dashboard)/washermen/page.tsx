@@ -143,7 +143,7 @@ export default function WashermanPage() {
         <div className="flex justify-end">
           <RowMenu
             items={[
-              { label: 'View Details', icon: <ArrowUpRight size={14} />, onClick: () => router.push(`/washerman/${v.id}`) },
+              { label: 'View Details', icon: <ArrowUpRight size={14} />, onClick: () => router.push(`/washermen/${v.id}`) },
               ...(v.verificationStatus === 'pending_review'
                 ? [
                     { label: 'Verify', icon: <Check size={14} />, onClick: () => verify(v) },
