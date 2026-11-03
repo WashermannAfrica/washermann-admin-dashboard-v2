@@ -1,17 +1,18 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Eye, Pencil } from 'lucide-react';
+import { Plus, Eye, Pencil, PowerOff, Power } from 'lucide-react';
 import { StatBlock } from '@/components/ui/PageKpi';
 import { DataTable, Column } from '@/components/ui/DataTable';
 import { Chip } from '@/components/ui/Chip';
 import { RowMenu } from '@/components/ui/RowMenu';
-import { Modal } from '@/components/ui/Modal';
+import { ConfirmModal, Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input, SelectField } from '@/components/ui/Input';
 import { api } from '@/lib/api';
 import { Bag, BagCatalogueCategory } from '@/types/ops';
 import { MultiSearchSelect, SelectOption } from '../ui/MultiSearchSelect';
+import { apiErr } from '@/lib/apiError';
 
 /** Move these to '@/types/ops' if you prefer to keep types together. */
 
@@ -87,11 +88,14 @@ export function WashBagsTab() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
+  const [toggling, setToggling] = useState<Bag | null>(null);
+  const [busy, setBusy] = useState(false);
+
   const load = useCallback(() => {
     setLoading(true);
     setError('');
     api
-      .get<{ success: boolean; data: Bag[] }>('/bags')
+      .get<{ success: boolean; data: Bag[] }>('/bags/all')
       .then((r) => setBags(r.data.data))
       .catch((err) => setError(err?.response?.data?.message ?? 'Failed to load bags.'))
       .finally(() => setLoading(false));
@@ -199,6 +203,22 @@ export function WashBagsTab() {
     }
   }
 
+    async function confirmToggle() {
+      if (!toggling) return;
+      setBusy(true);
+      try {
+        // Assumes PATCH /bags/:id { isActive }. Swap for a dedicated endpoint if you have one.
+        await api.patch(`/bags/${toggling.id}`, { isActive: !toggling.isActive });
+        setToggling(null);
+        load();
+      } catch (err) {
+        setError(apiErr(err));
+        setToggling(null);
+      } finally {
+        setBusy(false);
+      }
+    }
+
   const activeCount = bags.filter((b) => b.isActive).length;
 
   const columns: Column<Bag>[] = [
@@ -252,6 +272,12 @@ export function WashBagsTab() {
           items={[
             { label: 'View Details', icon: <Eye size={14} />, onClick: () => openView(b) },
             { label: 'Edit Bag', icon: <Pencil size={14} />, onClick: () => openEdit(b) },
+             {
+              label: b.isActive ? 'Deactivate' : 'Activate',
+              icon: b.isActive ? <PowerOff size={14} /> : <Power size={14} />,
+              danger: b.isActive,
+              onClick: () => setToggling(b),
+            },
           ]}
         />
       ),
@@ -383,6 +409,22 @@ export function WashBagsTab() {
           </form>
         )}
       </Modal>
+
+
+            <ConfirmModal
+              open={!!toggling}
+              onClose={() => setToggling(null)}
+              onConfirm={confirmToggle}
+              icon={toggling?.isActive ? <PowerOff size={20} /> : <Power size={20} />}
+              danger={!!toggling?.isActive}
+              title={toggling?.isActive ? `Deactivate ${toggling?.name}?` : `Activate ${toggling?.name ?? 'bundle'}?`}
+              body={
+                toggling?.isActive
+                  ? 'Deactivating hides this bag from customers so it can no longer be purchased. You can reactivate it at any time.'
+                  : 'Activating makes this bag visible and purchasable by customers again.'
+              }
+              confirmLabel={busy ? 'Saving…' : toggling?.isActive ? 'Deactivate' : 'Activate'}
+            />
     </div>
   );
 }
