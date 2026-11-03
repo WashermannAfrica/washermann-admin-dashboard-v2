@@ -72,6 +72,7 @@ const GROUPS: NavGroupDef[] = [
     title: 'Catalogue & Finance',
     items: [
       { label: 'Catalogue',     href: '/catalogue',     icon: <Shirt size={16} /> },
+      { label: 'Bags & Bundle',     href: '/bags-and-bundle',     icon: <ShoppingBag size={16} /> },
       { label: 'Transport',     href: '/transport',     icon: <Truck size={16} /> },
       { label: 'Financials',    href: '/financials',    icon: <Banknote size={16} /> },
       { label: 'Wash-points', href: '/wash-points', icon: <CircleDollarSign size={16} /> },
