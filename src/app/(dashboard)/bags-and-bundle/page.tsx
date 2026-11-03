@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { UserRound } from 'lucide-react';
+import { ShoppingBag, UserRound } from 'lucide-react';
 import { PageKpi } from '@/components/ui/PageKpi';
 import { Tabs } from '@/components/ui/Tabs';
 import { WashBagsTab } from '@/components/bags/WashBagsTab';
@@ -15,9 +15,9 @@ export default function RepsPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <PageKpi
-        icon={<UserRound size={16} />}
+        icon={<ShoppingBag size={16} />}
         iconClass="bg-primary text-white"
-        label="Reps"
+        label="Bags & Bundles"
         value="Bags & Bundles"
       />
 
