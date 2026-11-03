@@ -454,6 +454,20 @@ export type CatalogueItem = {
   floorPriceNgn: number | null;
 };
 
+export type BagCatalogueItem = {
+  id: string;
+  name: string;
+  categoryId: string;
+  isActive: boolean;
+}
+
+export type BagCatalogueCategory = {
+  id: string;
+  name: string;
+  isActive: boolean;
+  items: CatalogueItem[];
+}
+
 export type VendorDocument = {
   id: string;
   vendorId: string;
@@ -510,3 +524,57 @@ export type VendorPayout = {
   autoReleaseAt?: string | null;
   createdAt: string;
 };
+
+export type Bag = {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  allowedItemCount: number;
+  eligibleItemIds: string[];
+  eligibleCategoryIds: string[];
+  priceNgn: number;
+  priceWp: number;
+  priceComputedAt: string | null;
+  isActive: boolean;
+  sortOrder: number;
+  createdBy?: string;
+  updatedBy?: string;
+}
+
+export type BundleLine = {
+  id: string;
+  bundleId: string;
+  lineType: 'item' | 'category';
+  itemId: string | null;
+  categoryId: string | null;
+  quantity: number;
+  sortOrder: number;
+}
+
+export type Bundle = {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  imageUrl: string | null;
+  isActive: boolean;
+  priceNgn: number;
+  priceWp: number;
+  priceComputedAt: string | null;
+  isPromo: boolean;
+  promoType: 'percentage' | 'fixed' | null;
+  promoValue: number | null;
+  effectivePriceNgn: number;
+  effectivePriceWp: number;
+  expiresAt: string | null;
+  audience: Record<string, unknown> | null;
+  sortOrder: number;
+  lines: BundleLine[];
+}
+
+
