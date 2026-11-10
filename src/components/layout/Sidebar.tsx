@@ -28,6 +28,7 @@ import {
   FileText,
   ShieldAlert,
   Truck,
+  AlertTriangle,
   ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -51,6 +52,7 @@ const GROUPS: NavGroupDef[] = [
     title: 'Operations',
     items: [
       { label: 'Orders',       href: '/orders',     icon: <ShoppingBag size={16} /> },
+      { label: 'Escalations',  href: '/escalations', icon: <AlertTriangle size={16} /> },
       { label: 'Compliance',   href: '/compliance', icon: <ShieldAlert size={16} /> },
       { label: 'Disputes',     href: '/disputes',   icon: <Scale size={16} /> },
       { label: 'Live Support', href: '/support',    icon: <Headset size={16} /> },
