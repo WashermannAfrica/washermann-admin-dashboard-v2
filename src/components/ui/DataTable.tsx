@@ -60,6 +60,12 @@ interface DataTableProps<T> {
   /** When set, filter pills are server-side: the parent refetches filtered.
    *  Provide explicit `options` on each filter def (data is only one page). */
   onFilter?: (label: string, value: string | null) => void;
+  /** When set, a From/To date-range control is shown. `field` returns the row's
+   *  date (ISO string / date). By default it filters CLIENT-SIDE over loaded rows. */
+  dateRange?: { field: (row: T) => string | number | null | undefined; label?: string };
+  /** When set, the date range is SERVER-SIDE: `from`/`to` (YYYY-MM-DD, or null to
+   *  clear) are handed to the parent to refetch; client-side date filtering is skipped. */
+  onDateRange?: (from: string | null, to: string | null) => void;
   /** Subtle in-place "updating" state for server refetches (search/sort/filter/
    *  page). Keeps the toolbar + table mounted (and the search box focused);
    *  just dims the rows and shows a small spinner. Use this instead of swapping
@@ -135,11 +141,15 @@ export function DataTable<T extends Record<string, unknown>>({
   serverPagination,
   onSort,
   onFilter,
+  dateRange,
+  onDateRange,
   loading = false,
 }: DataTableProps<T>) {
   const serverMode = !!serverPagination;
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   // Server-side search: debounce the input and hand it to the parent, which
   // refetches. Client text-filtering is then skipped (see `filtered`).
@@ -205,6 +215,17 @@ export function DataTable<T extends Record<string, unknown>>({
         out = out.filter((r) => cellText(c, r) === val);
       }
     }
+    // Client-side date-range filter — skipped in server date mode.
+    if (dateRange && !onDateRange && (dateFrom || dateTo)) {
+      out = out.filter((r) => {
+        const raw = dateRange.field(r);
+        if (raw == null) return false;
+        const day = String(raw).slice(0, 10); // YYYY-MM-DD
+        if (dateFrom && day < dateFrom) return false;
+        if (dateTo && day > dateTo) return false;
+        return true;
+      });
+    }
     // Client-side sort — skipped in server-sort mode.
     if (!onSort && sortKey) {
       const col = columns.find((c) => c.key === sortKey);
@@ -217,7 +238,7 @@ export function DataTable<T extends Record<string, unknown>>({
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, q, sortKey, sortDir, active, filters, columns]);
+  }, [rows, q, sortKey, sortDir, active, filters, columns, dateFrom, dateTo]);
 
   const pages = serverMode
     ? Math.max(1, Math.ceil(serverPagination!.total / serverPagination!.pageSize))
@@ -276,6 +297,35 @@ export function DataTable<T extends Record<string, unknown>>({
             onSelect={(v) => { setActive((a) => ({ ...a, [f.label]: v })); setPage(1); onFilter?.(f.label, v); }}
           />
         ))}
+        {dateRange && (
+          <div className="flex items-center gap-1.5">
+            <input
+              type="date"
+              value={dateFrom}
+              max={dateTo || undefined}
+              aria-label={`${dateRange.label ?? 'Date'} from`}
+              onChange={(e) => { setDateFrom(e.target.value); setPage(1); onDateRange?.(e.target.value || null, dateTo || null); }}
+              className="h-9 rounded-full border border-line bg-white px-3 text-[13px] text-body focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+            <span className="text-xs text-faint">–</span>
+            <input
+              type="date"
+              value={dateTo}
+              min={dateFrom || undefined}
+              aria-label={`${dateRange.label ?? 'Date'} to`}
+              onChange={(e) => { setDateTo(e.target.value); setPage(1); onDateRange?.(dateFrom || null, e.target.value || null); }}
+              className="h-9 rounded-full border border-line bg-white px-3 text-[13px] text-body focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+            {(dateFrom || dateTo) && (
+              <button
+                onClick={() => { setDateFrom(''); setDateTo(''); setPage(1); onDateRange?.(null, null); }}
+                className="text-xs text-faint hover:text-ink"
+              >
+                clear
+              </button>
+            )}
+          </div>
+        )}
         <div className="ml-auto flex items-center gap-2">
           {headerExtra}
           {onExport && (

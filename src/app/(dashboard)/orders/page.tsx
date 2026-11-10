@@ -43,6 +43,8 @@ export default function OrdersPage() {
   const [status, setStatus] = useState<string | null>(null);
   const [service, setService] = useState<string | null>(null);
   const [flow, setFlow] = useState<string | null>(null);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [adminActionsOpen, setAdminActionsOpen] = useState(false);
 
 
@@ -81,13 +83,15 @@ const repSub = (r: RepLite) =>
     if (status) params.set('status', status);
     if (service) params.set('serviceType', service);
     if (flow) params.set('flow', flow);
+    if (dateFrom) params.set('from', dateFrom);
+    if (dateTo) params.set('to', dateTo);
     if (sort) { params.set('sortBy', sort.by); params.set('sortDir', sort.dir); }
     api
       .get<Paginated<Order>>(`/orders?${params.toString()}`)
       .then((res) => { setOrders(res.data.data); setTotal(res.data.meta.total); })
       .catch((err) => setError(apiErr(err)))
       .finally(() => setLoading(false));
-  }, [search, page, status, service, flow, sort]);
+  }, [search, page, status, service, flow, dateFrom, dateTo, sort]);
 
   useEffect(load, [load]);
 
@@ -252,6 +256,8 @@ const repSub = (r: RepLite) =>
             if (label === 'Type') setFlow(v);
             setPage(1);
           }}
+          dateRange={{ field: (o) => o.createdAt, label: 'Created' }}
+          onDateRange={(from, to) => { setDateFrom(from ?? ''); setDateTo(to ?? ''); setPage(1); }}
           filters={[
             { label: 'Status', options: ['paid', 'broadcasting_rep', 'rep_assigned', 'broadcasting_vendor', 'vendor_assigned', 'scheduled', 'picked_up', 'with_vendor', 'in_progress', 'ready_for_delivery', 'out_for_delivery', 'delivered', 'completed', 'cancelled', 'disputed'] },
             { label: 'Service', options: ['wash_fold', 'wash_iron'] },
@@ -329,6 +335,20 @@ const repSub = (r: RepLite) =>
                     <dt className="text-faint">Area</dt>
                     <dd className="font-medium text-ink">{selected.areaName ?? '—'}</dd>
                   </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <dt className="text-faint">Washerman</dt>
+                    <dd className="text-right font-medium text-ink">
+                      {selected.vendorName ?? '—'}
+                      {selected.vendorPhone && <span className="text-faint"> ({selected.vendorPhone})</span>}
+                    </dd>
+                  </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <dt className="text-faint">Wash-rep</dt>
+                    <dd className="text-right font-medium text-ink">
+                      {selected.repName ?? '—'}
+                      {selected.repPhone && <span className="text-faint"> ({selected.repPhone})</span>}
+                    </dd>
+                  </div>
                 </dl>
 
                 <div className="my-4 border-t border-dashed border-line" />
@@ -359,6 +379,43 @@ const repSub = (r: RepLite) =>
                     </div>
                   </div>
                 )}
+
+                {/* payment breakdown (quoted composition) */}
+                {selected.pricingSnapshot && (
+                  <div className="mt-4 rounded-2xl bg-section p-4">
+                    <p className="text-sm font-bold text-ink">Payment Breakdown (WP)</p>
+                    <dl className="mt-2 space-y-1.5 text-sm">
+                      {(selected.pricingSnapshot.subtotalWP ?? selected.pricingSnapshot.charges?.baseWP) != null && (
+                        <div className="flex items-center justify-between"><dt className="text-faint">Items subtotal</dt><dd className="font-medium text-ink">{selected.pricingSnapshot.subtotalWP ?? selected.pricingSnapshot.charges?.baseWP} pts</dd></div>
+                      )}
+                      {selected.pricingSnapshot.charges?.commissionWP != null && (
+                        <div className="flex items-center justify-between"><dt className="text-faint">Wash-rep commission</dt><dd className="font-medium text-ink">{selected.pricingSnapshot.charges.commissionWP} pts</dd></div>
+                      )}
+                      {(selected.pricingSnapshot.charges?.vatWP ?? selected.pricingSnapshot.vatWP) != null && (
+                        <div className="flex items-center justify-between"><dt className="text-faint">VAT</dt><dd className="font-medium text-ink">{selected.pricingSnapshot.charges?.vatWP ?? selected.pricingSnapshot.vatWP} pts</dd></div>
+                      )}
+                      {(selected.pricingSnapshot.transportWP ?? selected.transportEstimateWp) != null && (
+                        <div className="flex items-center justify-between"><dt className="text-faint">Transport / mobility</dt><dd className="font-medium text-ink">{selected.pricingSnapshot.transportWP ?? selected.transportEstimateWp} pts</dd></div>
+                      )}
+                      <div className="mt-1 flex items-center justify-between border-t border-dashed border-line pt-1.5">
+                        <dt className="font-semibold text-ink">Total</dt>
+                        <dd className="font-bold text-ink">{selected.totalWP} pts</dd>
+                      </div>
+                    </dl>
+                  </div>
+                )}
+
+                {/* settlement split (locked at garment-log / completion) */}
+                {(selected.vendorShareWP || selected.repShareWP || selected.platformShareWP) ? (
+                  <div className="mt-4 rounded-2xl bg-section p-4">
+                    <p className="text-sm font-bold text-ink">Settlement Split (WP)</p>
+                    <dl className="mt-2 space-y-1.5 text-sm">
+                      <div className="flex items-center justify-between"><dt className="text-faint">Vendor earnings</dt><dd className="font-medium text-ink">{selected.vendorShareWP} pts</dd></div>
+                      <div className="flex items-center justify-between"><dt className="text-faint">Rep commission</dt><dd className="font-medium text-ink">{selected.repShareWP} pts</dd></div>
+                      <div className="flex items-center justify-between"><dt className="text-faint">Platform margin</dt><dd className="font-medium text-ink">{selected.platformShareWP} pts</dd></div>
+                    </dl>
+                  </div>
+                ) : null}
 
                 {/* timeline */}
                 <div className="mt-5">

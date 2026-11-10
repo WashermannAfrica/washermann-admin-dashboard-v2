@@ -19,8 +19,15 @@ import type { Referral } from '@/types/ops';
 const fmtAmount = (r: Referral) =>
   r.rewardAmount == null ? '—' : r.rewardCurrency === 'cash' ? `₦${Number(r.rewardAmount).toLocaleString()}` : `${r.rewardAmount} WP`;
 
+type RefSummary = {
+  total?: number;
+  outstandingLiability?: { cash?: number; wp?: number };
+  paidToDate?: { cash?: number; wp?: number };
+};
+
 export function ReferralsTab() {
   const [rows, setRows] = useState<Referral[]>([]);
+  const [summary, setSummary] = useState<RefSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [rejecting, setRejecting] = useState<Referral | null>(null);
@@ -38,6 +45,11 @@ export function ReferralsTab() {
       .then((res) => setRows(Array.isArray(res.data.data) ? res.data.data : []))
       .catch((err) => setError(apiErr(err)))
       .finally(() => setLoading(false));
+    // Portfolio summary (outstanding vs paid, by currency) — non-blocking.
+    api
+      .get<ApiResponse<RefSummary>>('/referrals/summary')
+      .then((res) => setSummary(res.data.data ?? null))
+      .catch(() => undefined);
   }, []);
 
   useEffect(load, [load]);
@@ -107,6 +119,21 @@ export function ReferralsTab() {
   return (
     <div className="space-y-3">
       {error && <p className="rounded-xl bg-danger-bg px-4 py-2 text-sm text-danger">{error}</p>}
+      {summary && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {([
+            ['Outstanding · cash', `₦${(summary.outstandingLiability?.cash ?? 0).toLocaleString()}`],
+            ['Outstanding · WP', `${(summary.outstandingLiability?.wp ?? 0).toLocaleString()} WP`],
+            ['Paid to date · cash', `₦${(summary.paidToDate?.cash ?? 0).toLocaleString()}`],
+            ['Paid to date · WP', `${(summary.paidToDate?.wp ?? 0).toLocaleString()} WP`],
+          ] as [string, string][]).map(([label, value]) => (
+            <div key={label} className="rounded-2xl border border-line bg-white p-4">
+              <p className="text-xs text-faint">{label}</p>
+              <p className="mt-1 text-lg font-bold text-ink">{value}</p>
+            </div>
+          ))}
+        </div>
+      )}
       <DataTable
         columns={columns}
         rows={rows}
@@ -116,6 +143,7 @@ export function ReferralsTab() {
           { label: 'Referrer', options: ['customer', 'vendor', 'rep', 'sales_rep'] },
           { label: 'Referred', options: ['customer', 'vendor'] },
         ]}
+        dateRange={{ field: (r) => r.createdAt, label: 'Created' }}
         pageSize={12}
         emptyText="No referrals yet."
       />
