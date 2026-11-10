@@ -28,6 +28,8 @@ export default function DisputesPage() {
   const [page, setPage] = useState(1);
   const [group, setGroup] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const [selected, setSelected] = useState<DisputeDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -41,6 +43,8 @@ export default function DisputesPage() {
     if (search) p.set('search', search);
     if (status) p.set('status', status);
     else if (group) p.set('group', group);
+    if (dateFrom) p.set('from', dateFrom);
+    if (dateTo) p.set('to', dateTo);
     api
       .get<Paginated<DisputeListItem> & { counts: DisputeCounts }>(`/disputes?${p.toString()}`)
       .then((res) => {
@@ -50,7 +54,7 @@ export default function DisputesPage() {
       })
       .catch((err) => setError(apiErr(err)))
       .finally(() => setLoading(false));
-  }, [page, search, group, status]);
+  }, [page, search, group, status, dateFrom, dateTo]);
 
   useEffect(load, [load]);
 
@@ -129,6 +133,8 @@ export default function DisputesPage() {
             if (label === 'Group') { setGroup(v ? v.toLowerCase() : null); setStatus(null); }
             setPage(1);
           }}
+          dateRange={{ field: (d) => d.createdAt, label: 'Created' }}
+          onDateRange={(from, to) => { setDateFrom(from ?? ''); setDateTo(to ?? ''); setPage(1); }}
           filters={[
             { label: 'Group', options: ['Open', 'Closed'] },
             { label: 'Status', options: ['reported', 'under_review', 'investigating', 'resolved', 'rejected'] },

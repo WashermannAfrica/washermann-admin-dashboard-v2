@@ -105,6 +105,7 @@ export function PayoutsTab() {
         rows={rows}
         searchPlaceholder="Search payouts"
         filters={[{ label: 'Status', options: [] }]}
+        dateRange={{ field: (r) => r.createdAt, label: 'Requested' }}
         pageSize={10}
         emptyText="No payout requests yet."
       />

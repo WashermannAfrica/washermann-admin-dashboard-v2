@@ -43,6 +43,8 @@ export default function OrdersPage() {
   const [status, setStatus] = useState<string | null>(null);
   const [service, setService] = useState<string | null>(null);
   const [flow, setFlow] = useState<string | null>(null);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [adminActionsOpen, setAdminActionsOpen] = useState(false);
 
 
@@ -81,13 +83,15 @@ const repSub = (r: RepLite) =>
     if (status) params.set('status', status);
     if (service) params.set('serviceType', service);
     if (flow) params.set('flow', flow);
+    if (dateFrom) params.set('from', dateFrom);
+    if (dateTo) params.set('to', dateTo);
     if (sort) { params.set('sortBy', sort.by); params.set('sortDir', sort.dir); }
     api
       .get<Paginated<Order>>(`/orders?${params.toString()}`)
       .then((res) => { setOrders(res.data.data); setTotal(res.data.meta.total); })
       .catch((err) => setError(apiErr(err)))
       .finally(() => setLoading(false));
-  }, [search, page, status, service, flow, sort]);
+  }, [search, page, status, service, flow, dateFrom, dateTo, sort]);
 
   useEffect(load, [load]);
 
@@ -252,6 +256,8 @@ const repSub = (r: RepLite) =>
             if (label === 'Type') setFlow(v);
             setPage(1);
           }}
+          dateRange={{ field: (o) => o.createdAt, label: 'Created' }}
+          onDateRange={(from, to) => { setDateFrom(from ?? ''); setDateTo(to ?? ''); setPage(1); }}
           filters={[
             { label: 'Status', options: ['paid', 'broadcasting_rep', 'rep_assigned', 'broadcasting_vendor', 'vendor_assigned', 'scheduled', 'picked_up', 'with_vendor', 'in_progress', 'ready_for_delivery', 'out_for_delivery', 'delivered', 'completed', 'cancelled', 'disputed'] },
             { label: 'Service', options: ['wash_fold', 'wash_iron'] },

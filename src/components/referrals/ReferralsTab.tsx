@@ -143,6 +143,7 @@ export function ReferralsTab() {
           { label: 'Referrer', options: ['customer', 'vendor', 'rep', 'sales_rep'] },
           { label: 'Referred', options: ['customer', 'vendor'] },
         ]}
+        dateRange={{ field: (r) => r.createdAt, label: 'Created' }}
         pageSize={12}
         emptyText="No referrals yet."
       />
