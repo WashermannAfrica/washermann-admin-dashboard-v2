@@ -358,6 +358,12 @@ export type Order = {
   repPhone?: string | null;
   pickupAddress?: string | null;
   transportEstimateWp?: number | null;
+  // Logistics (mobility) jobs:
+  requesterType?: string | null;
+  recipient?: { name?: string; phone?: string; address?: string; latitude?: number; longitude?: number } | null;
+  trackingToken?: string | null;
+  parentOrderId?: string | null;
+  mobilityFeeWp?: number | null;
   pricingSnapshot?: {
     lineItems?: OrderLineItem[];
     subtotalWP?: number;
