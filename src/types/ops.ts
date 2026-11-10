@@ -352,8 +352,21 @@ export type Order = {
   customerEmail?: string | null;
   companyName?: string | null;
   areaName?: string | null;
+  vendorName?: string | null;
+  vendorPhone?: string | null;
+  repName?: string | null;
+  repPhone?: string | null;
   pickupAddress?: string | null;
-  pricingSnapshot?: { lineItems?: OrderLineItem[] } | null;
+  transportEstimateWp?: number | null;
+  pricingSnapshot?: {
+    lineItems?: OrderLineItem[];
+    subtotalWP?: number;
+    transportWP?: number;
+    vatWP?: number;
+    totalWP?: number;
+    nairaEquivalent?: number;
+    charges?: { baseWP?: number; commissionWP?: number; vatWP?: number };
+  } | null;
 };
 
 export type OrderTimelineEntry = {
