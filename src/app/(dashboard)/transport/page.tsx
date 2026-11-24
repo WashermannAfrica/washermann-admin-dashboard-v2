@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Truck } from 'lucide-react';
+import Link from 'next/link';
+import { Truck, Calculator } from 'lucide-react';
 import { PageKpi } from '@/components/ui/PageKpi';
 import { Section } from '@/components/ui/Section';
 import { Button } from '@/components/ui/Button';
@@ -12,19 +13,19 @@ import { apiErr } from '@/lib/apiError';
 import type { ApiResponse } from '@/types';
 
 type TransportConfig = {
-  transportBaseFareWp: number;
-  transportPerKmWp: number;
-  transportMinWp: number;
-  transportMaxWp: number;
+  transportBaseFareNgn: number;
+  transportPerKmNgn: number;
+  transportMinNgn: number;
+  transportMaxNgn: number;
   transportEstimateBasis: 'average' | 'p75';
   transportDistanceProvider: 'haversine' | 'google';
 };
 
 const FIELDS: { key: keyof TransportConfig; label: string; hint: string }[] = [
-  { key: 'transportBaseFareWp', label: 'Base fare (WP)', hint: 'Fixed amount added to every trip' },
-  { key: 'transportPerKmWp', label: 'Per-km (WP)', hint: 'Applied to the round-trip distance (customer ⇄ vendor, ×2)' },
-  { key: 'transportMinWp', label: 'Minimum (WP)', hint: 'Floor for the transport fee' },
-  { key: 'transportMaxWp', label: 'Maximum (WP)', hint: '0 = no cap' },
+  { key: 'transportBaseFareNgn', label: 'Base fare (₦)', hint: 'Fixed amount added to every trip' },
+  { key: 'transportPerKmNgn', label: 'Per-km (₦)', hint: 'Applied to the round-trip distance (customer ⇄ vendor, ×2)' },
+  { key: 'transportMinNgn', label: 'Minimum (₦)', hint: 'Floor for the transport fee' },
+  { key: 'transportMaxNgn', label: 'Maximum (₦)', hint: '0 = no cap' },
 ];
 
 export default function TransportSettingsPage() {
@@ -41,10 +42,10 @@ export default function TransportSettingsPage() {
       .then((res) => {
         const c = res.data.data;
         setForm({
-          transportBaseFareWp: Number(c.transportBaseFareWp ?? 0),
-          transportPerKmWp: Number(c.transportPerKmWp ?? 0),
-          transportMinWp: Number(c.transportMinWp ?? 0),
-          transportMaxWp: Number(c.transportMaxWp ?? 0),
+          transportBaseFareNgn: Number(c.transportBaseFareNgn ?? 0),
+          transportPerKmNgn: Number(c.transportPerKmNgn ?? 0),
+          transportMinNgn: Number(c.transportMinNgn ?? 0),
+          transportMaxNgn: Number(c.transportMaxNgn ?? 0),
           transportEstimateBasis: c.transportEstimateBasis ?? 'average',
           transportDistanceProvider: c.transportDistanceProvider ?? 'haversine',
         });
@@ -78,12 +79,20 @@ export default function TransportSettingsPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <PageKpi icon={<Truck size={16} />} iconClass="bg-forest text-white" label="Transport pricing" value="Distance-based fee" />
+      <div className="flex items-center justify-between gap-3">
+        <PageKpi icon={<Truck size={16} />} iconClass="bg-forest text-white" label="Transport pricing" value="Distance-based fee" className="flex-1" />
+        <Link
+          href="/transport/playground"
+          className="inline-flex items-center gap-1.5 rounded-xl border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-section"
+        >
+          <Calculator size={15} /> Fare playground
+        </Link>
+      </div>
 
       <Section>
         <p className="pb-4 text-sm text-faint">
-          Transport = <span className="font-mono">base + per-km × 2 × distance(customer ⇄ vendor)</span>, clamped to min/max.
-          Customers are charged an estimate over the area’s located vendors; reps are paid the actual, capped at the estimate.
+          Transport = <span className="font-mono">base + per-km × 2 × distance(customer ⇄ vendor)</span>, clamped to min/max — all in Naira (₦).
+          The fare is converted to WashPoints at the live rate for the wallet. Customers are charged an estimate over the area’s located vendors; reps are paid the actual, capped at the estimate.
         </p>
 
         <div className="grid gap-4 sm:grid-cols-2">

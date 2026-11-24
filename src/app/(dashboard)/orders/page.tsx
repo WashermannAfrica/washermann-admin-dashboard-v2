@@ -19,6 +19,40 @@ import { Textarea } from '@/components/ui/Input';
 import { EntitySearchSelect } from '@/components/ui/EntitySearchSelect';
 
 const naira = (n: number | null) => `₦${Number(n ?? 0).toLocaleString()}`;
+
+/** The order's frozen ₦-per-WP rate, derived from its own snapshot (internally
+ *  consistent with how the rest of the order shows ₦). Null if not derivable. */
+const wpToNgn = (
+  wp: number | null | undefined,
+  order: Pick<Order, 'nairaEquivalentSnapshot' | 'totalWP'>,
+): number | null => {
+  if (wp == null) return null;
+  const r =
+    order.nairaEquivalentSnapshot != null && order.totalWP > 0
+      ? order.nairaEquivalentSnapshot / order.totalWP
+      : null;
+  return r == null ? null : Math.round(wp * r);
+};
+
+/** A WP figure with its ₦ equivalent beside it (pass `exactNgn` for the total). */
+function WpNgn({
+  wp,
+  order,
+  exactNgn,
+}: {
+  wp: number | null | undefined;
+  order: Pick<Order, 'nairaEquivalentSnapshot' | 'totalWP'>;
+  exactNgn?: number | null;
+}) {
+  if (wp == null) return null;
+  const ngn = exactNgn ?? wpToNgn(wp, order);
+  return (
+    <>
+      {wp.toLocaleString()} pts
+      {ngn != null && <span className="ml-1 text-xs text-faint">· {naira(ngn)}</span>}
+    </>
+  );
+}
 const pretty = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 const prettyFlow = (f?: string) =>
   f === 'logistics_delivery' ? 'Logistics · Delivery'
@@ -383,23 +417,24 @@ const repSub = (r: RepLite) =>
                 {/* payment breakdown (quoted composition) */}
                 {selected.pricingSnapshot && (
                   <div className="mt-4 rounded-2xl bg-section p-4">
-                    <p className="text-sm font-bold text-ink">Payment Breakdown (WP)</p>
+                    <p className="text-sm font-bold text-ink">Payment Breakdown</p>
+                    <p className="mt-0.5 text-xs text-faint">Charged in WashPoints · ₦ shown at this order’s frozen rate.</p>
                     <dl className="mt-2 space-y-1.5 text-sm">
                       {(selected.pricingSnapshot.subtotalWP ?? selected.pricingSnapshot.charges?.baseWP) != null && (
-                        <div className="flex items-center justify-between"><dt className="text-faint">Items subtotal</dt><dd className="font-medium text-ink">{selected.pricingSnapshot.subtotalWP ?? selected.pricingSnapshot.charges?.baseWP} pts</dd></div>
+                        <div className="flex items-center justify-between"><dt className="text-faint">Items subtotal</dt><dd className="font-medium text-ink"><WpNgn wp={selected.pricingSnapshot.subtotalWP ?? selected.pricingSnapshot.charges?.baseWP} order={selected} /></dd></div>
                       )}
                       {selected.pricingSnapshot.charges?.commissionWP != null && (
-                        <div className="flex items-center justify-between"><dt className="text-faint">Wash-rep commission</dt><dd className="font-medium text-ink">{selected.pricingSnapshot.charges.commissionWP} pts</dd></div>
+                        <div className="flex items-center justify-between"><dt className="text-faint">Wash-rep commission</dt><dd className="font-medium text-ink"><WpNgn wp={selected.pricingSnapshot.charges.commissionWP} order={selected} /></dd></div>
                       )}
                       {(selected.pricingSnapshot.charges?.vatWP ?? selected.pricingSnapshot.vatWP) != null && (
-                        <div className="flex items-center justify-between"><dt className="text-faint">VAT</dt><dd className="font-medium text-ink">{selected.pricingSnapshot.charges?.vatWP ?? selected.pricingSnapshot.vatWP} pts</dd></div>
+                        <div className="flex items-center justify-between"><dt className="text-faint">VAT</dt><dd className="font-medium text-ink"><WpNgn wp={selected.pricingSnapshot.charges?.vatWP ?? selected.pricingSnapshot.vatWP} order={selected} /></dd></div>
                       )}
                       {(selected.pricingSnapshot.transportWP ?? selected.transportEstimateWp) != null && (
-                        <div className="flex items-center justify-between"><dt className="text-faint">Transport / mobility</dt><dd className="font-medium text-ink">{selected.pricingSnapshot.transportWP ?? selected.transportEstimateWp} pts</dd></div>
+                        <div className="flex items-center justify-between"><dt className="text-faint">Transport / mobility</dt><dd className="font-medium text-ink"><WpNgn wp={selected.pricingSnapshot.transportWP ?? selected.transportEstimateWp} order={selected} /></dd></div>
                       )}
                       <div className="mt-1 flex items-center justify-between border-t border-dashed border-line pt-1.5">
                         <dt className="font-semibold text-ink">Total</dt>
-                        <dd className="font-bold text-ink">{selected.totalWP} pts</dd>
+                        <dd className="font-bold text-ink"><WpNgn wp={selected.totalWP} order={selected} exactNgn={selected.nairaEquivalentSnapshot} /></dd>
                       </div>
                     </dl>
                   </div>
@@ -408,11 +443,11 @@ const repSub = (r: RepLite) =>
                 {/* settlement split (locked at garment-log / completion) */}
                 {(selected.vendorShareWP || selected.repShareWP || selected.platformShareWP) ? (
                   <div className="mt-4 rounded-2xl bg-section p-4">
-                    <p className="text-sm font-bold text-ink">Settlement Split (WP)</p>
+                    <p className="text-sm font-bold text-ink">Settlement Split</p>
                     <dl className="mt-2 space-y-1.5 text-sm">
-                      <div className="flex items-center justify-between"><dt className="text-faint">Vendor earnings</dt><dd className="font-medium text-ink">{selected.vendorShareWP} pts</dd></div>
-                      <div className="flex items-center justify-between"><dt className="text-faint">Rep commission</dt><dd className="font-medium text-ink">{selected.repShareWP} pts</dd></div>
-                      <div className="flex items-center justify-between"><dt className="text-faint">Platform margin</dt><dd className="font-medium text-ink">{selected.platformShareWP} pts</dd></div>
+                      <div className="flex items-center justify-between"><dt className="text-faint">Vendor earnings</dt><dd className="font-medium text-ink"><WpNgn wp={selected.vendorShareWP} order={selected} /></dd></div>
+                      <div className="flex items-center justify-between"><dt className="text-faint">Rep commission</dt><dd className="font-medium text-ink"><WpNgn wp={selected.repShareWP} order={selected} /></dd></div>
+                      <div className="flex items-center justify-between"><dt className="text-faint">Platform margin</dt><dd className="font-medium text-ink"><WpNgn wp={selected.platformShareWP} order={selected} /></dd></div>
                     </dl>
                   </div>
                 ) : null}
