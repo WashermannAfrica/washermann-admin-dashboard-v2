@@ -357,6 +357,11 @@ export type Order = {
   repName?: string | null;
   repPhone?: string | null;
   pickupAddress?: string | null;
+  pickupLatitude?: number | null;
+  pickupLongitude?: number | null;
+  dropoffLatitude?: number | null;
+  dropoffLongitude?: number | null;
+  specialInstructions?: string | null;
   transportEstimateWp?: number | null;
   // Logistics (mobility) jobs:
   requesterType?: string | null;

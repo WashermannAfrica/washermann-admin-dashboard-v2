@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Route, X, Copy, Check } from 'lucide-react';
+import { Route, X, Copy, Check, MapPin, Phone } from 'lucide-react';
 import { Section } from '@/components/ui/Section';
 import { DataTable, Column } from '@/components/ui/DataTable';
 import { Chip, statusTone } from '@/components/ui/Chip';
@@ -25,6 +25,73 @@ const repSub = (r: RepLite) => r.user?.email ?? r.email ?? '';
 
 const STATUSES = ['pending_payment', 'paid', 'broadcasting_rep', 'rep_assigned', 'scheduled', 'picked_up', 'out_for_delivery', 'delivered', 'completed', 'cancelled'];
 
+// Stages from which a leg may still be cancelled (mirrors the backend state machine —
+// cancellable up to and including `scheduled`, never once picked up).
+const CANCELLABLE = ['pending_payment', 'paid', 'broadcasting_rep', 'rep_assigned', 'broadcasting_vendor', 'vendor_assigned', 'scheduled'];
+
+const mapsLink = (lat?: number | null, lng?: number | null) =>
+  lat != null && lng != null ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}` : null;
+
+type Stop = {
+  role: 'Vendor' | 'Customer';
+  name: string;
+  phone: string | null;
+  address: string | null;
+  lat: number | null;
+  lng: number | null;
+};
+
+/**
+ * Resolve a leg's two physical ends in travel order (pickup → drop-off). A delivery
+ * runs vendor → customer; a collect runs customer → vendor. The customer end always
+ * comes from the recipient record; the vendor end's coordinates are the pickup point
+ * for a delivery and the drop-off point for a collect.
+ */
+function legEnds(o: Order): { pickup: Stop; dropoff: Stop } {
+  const isCollect = o.flow === 'logistics_collect';
+  const vendor: Stop = {
+    role: 'Vendor',
+    name: o.vendorName ?? 'Vendor',
+    phone: o.vendorPhone ?? null,
+    address: null, // vendors have no street address on file — the map pin is the locator
+    lat: isCollect ? o.dropoffLatitude ?? null : o.pickupLatitude ?? null,
+    lng: isCollect ? o.dropoffLongitude ?? null : o.pickupLongitude ?? null,
+  };
+  const customer: Stop = {
+    role: 'Customer',
+    name: o.recipient?.name ?? 'Recipient',
+    phone: o.recipient?.phone ?? null,
+    address: o.recipient?.address ?? null,
+    lat: o.recipient?.latitude ?? (isCollect ? o.pickupLatitude ?? null : o.dropoffLatitude ?? null),
+    lng: o.recipient?.longitude ?? (isCollect ? o.pickupLongitude ?? null : o.dropoffLongitude ?? null),
+  };
+  return isCollect ? { pickup: customer, dropoff: vendor } : { pickup: vendor, dropoff: customer };
+}
+
+/** Plain-text brief a rider can act on, built in travel order. */
+function repBrief(o: Order): string {
+  const { pickup, dropoff } = legEnds(o);
+  const line = (s: Stop) => {
+    const parts = [`${s.role}: ${s.name}`];
+    if (s.phone) parts.push(`Tel: ${s.phone}`);
+    if (s.address) parts.push(s.address);
+    const link = mapsLink(s.lat, s.lng);
+    if (link) parts.push(`Map: ${link}`);
+    return parts.join('\n');
+  };
+  const out = [
+    `${o.reference} — ${prettyFlow(o.flow)}`,
+    `Status: ${pretty(o.status)}`,
+    '',
+    `PICK UP\n${line(pickup)}`,
+    '',
+    `DROP OFF\n${line(dropoff)}`,
+  ];
+  if (o.specialInstructions) out.push('', `Notes: ${o.specialInstructions}`);
+  if (o.scheduledPickupAt) out.push('', `Scheduled: ${formatDateTime(o.scheduledPickupAt)}`);
+  return out.join('\n');
+}
+
 export default function LogisticsPage() {
   const [rows, setRows] = useState<Order[]>([]);
   const [total, setTotal] = useState(0);
@@ -43,7 +110,13 @@ export default function LogisticsPage() {
   const [assignOpen, setAssignOpen] = useState(false);
   const [repId, setRepId] = useState('');
   const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copiedToken, setCopiedToken] = useState(false);
+  const [copiedBrief, setCopiedBrief] = useState(false);
+
+  // Status-action modals
+  const [deliverOpen, setDeliverOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
 
   const load = useCallback(() => {
     setLoading(true);
@@ -64,14 +137,18 @@ export default function LogisticsPage() {
   useEffect(load, [load]);
 
   // Enriched detail (vendor/rep names, recipient, tracking) + timeline on open.
+  const refresh = useCallback(async (id: string) => {
+    const [d, h] = await Promise.all([
+      api.get<ApiResponse<Order>>(`/orders/${id}`),
+      api.get<ApiResponse<OrderTimelineEntry[]>>(`/orders/${id}/history`),
+    ]);
+    setSelected(d.data.data);
+    setTimeline(Array.isArray(h.data.data) ? h.data.data : []);
+  }, []);
+
   async function open(o: Order) {
     try {
-      const [d, h] = await Promise.all([
-        api.get<ApiResponse<Order>>(`/orders/${o.id}`),
-        api.get<ApiResponse<OrderTimelineEntry[]>>(`/orders/${o.id}/history`),
-      ]);
-      setSelected(d.data.data);
-      setTimeline(Array.isArray(h.data.data) ? h.data.data : []);
+      await refresh(o.id);
     } catch (e) {
       setError(apiErr(e));
     }
@@ -83,7 +160,24 @@ export default function LogisticsPage() {
     try {
       await api.post(`/assignment/orders/${selected.id}/assign/rep/${repId}`);
       setAssignOpen(false); setRepId('');
-      await open(selected);
+      await refresh(selected.id);
+      load();
+    } catch (e) {
+      setError(apiErr(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Guarded leg-status actions (admin). Each stays on the backend's lifecycle path.
+  async function runAction(fn: () => Promise<unknown>, onDone?: () => void) {
+    if (!selected) return;
+    setBusy(true);
+    setError('');
+    try {
+      await fn();
+      onDone?.();
+      await refresh(selected.id);
       load();
     } catch (e) {
       setError(apiErr(e));
@@ -102,7 +196,19 @@ export default function LogisticsPage() {
     { key: 'created', header: 'Created', render: (o) => <span className="text-body">{formatDateTime(o.createdAt)}</span> },
   ];
 
-  const needsRep = selected && ['paid', 'broadcasting_rep'].includes(selected.status) || (selected && !selected.repName);
+  const st = selected?.status ?? '';
+  const needsRep = !!selected && (['paid', 'broadcasting_rep'].includes(st) || !selected.repName);
+  const canPickup = st === 'scheduled';
+  const canDeliver = st === 'picked_up';
+  const canCancel = CANCELLABLE.includes(st);
+  const ends = selected ? legEnds(selected) : null;
+
+  function copyBrief() {
+    if (!selected) return;
+    navigator.clipboard?.writeText(repBrief(selected));
+    setCopiedBrief(true);
+    setTimeout(() => setCopiedBrief(false), 1600);
+  }
 
   return (
     <Section>
@@ -110,7 +216,7 @@ export default function LogisticsPage() {
         <Route size={18} className="text-primary" />
         <h1 className="text-lg font-bold text-ink">Logistics</h1>
       </div>
-      <p className="mb-4 text-sm text-faint">Rep-only mobility jobs (deliveries &amp; collections). Read-only oversight — view recipient, legs, tracking and status; assign a rep when needed.</p>
+      <p className="mb-4 text-sm text-faint">Rep-only mobility jobs (deliveries &amp; collections). Open a job to copy a rider brief, assign a rep, and move it through pickup &amp; delivery.</p>
 
       {error && <p className="mb-3 rounded-xl bg-danger-bg px-4 py-2 text-sm text-danger">{error}</p>}
 
@@ -137,7 +243,7 @@ export default function LogisticsPage() {
       />
 
       {/* detail drawer */}
-      {selected && (
+      {selected && ends && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setSelected(null)}>
           <div className="flex h-full w-full max-w-md flex-col bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 pt-6">
@@ -160,19 +266,54 @@ export default function LogisticsPage() {
                   <div className="flex items-center justify-between"><dt className="text-faint">Status</dt><dd><Chip tone={statusTone(selected.status)}>{pretty(selected.status)}</Chip></dd></div>
                   <div className="flex items-center justify-between"><dt className="text-faint">Requested by</dt><dd className="font-medium text-ink">{pretty(selected.requesterType ?? undefined)}</dd></div>
                   <div className="flex items-center justify-between"><dt className="text-faint">Area</dt><dd className="font-medium text-ink">{selected.areaName ?? '—'}</dd></div>
-                  <div className="flex items-start justify-between gap-3"><dt className="text-faint">Washerman</dt><dd className="text-right font-medium text-ink">{selected.vendorName ?? '—'}{selected.vendorPhone && <span className="text-faint"> ({selected.vendorPhone})</span>}</dd></div>
                   <div className="flex items-start justify-between gap-3"><dt className="text-faint">Wash-rep</dt><dd className="text-right font-medium text-ink">{selected.repName ?? '—'}{selected.repPhone && <span className="text-faint"> ({selected.repPhone})</span>}</dd></div>
                 </dl>
 
+                {/* ── Rider brief: the two stops in travel order, with map pins ── */}
                 <div className="my-4 border-t border-dashed border-line" />
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-bold text-ink">Rider brief</p>
+                  <button
+                    onClick={copyBrief}
+                    className="flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-xs font-medium text-body hover:bg-section"
+                  >
+                    {copiedBrief ? <><Check size={13} /> Copied</> : <><Copy size={13} /> Copy for rep</>}
+                  </button>
+                </div>
 
-                {/* recipient */}
-                <p className="text-sm font-bold text-ink">Recipient</p>
-                <dl className="mt-2 space-y-2.5 text-sm">
-                  <div className="flex items-center justify-between"><dt className="text-faint">Name</dt><dd className="font-medium text-ink">{selected.recipient?.name ?? '—'}</dd></div>
-                  <div className="flex items-center justify-between"><dt className="text-faint">Phone</dt><dd className="font-medium text-ink">{selected.recipient?.phone ?? '—'}</dd></div>
-                  <div className="flex items-start justify-between gap-3"><dt className="text-faint">Address</dt><dd className="text-right font-medium text-ink">{selected.recipient?.address ?? selected.pickupAddress ?? '—'}</dd></div>
-                </dl>
+                <div className="mt-3 space-y-3">
+                  {([['Pick up', ends.pickup], ['Drop off', ends.dropoff]] as const).map(([label, stop]) => {
+                    const link = mapsLink(stop.lat, stop.lng);
+                    return (
+                      <div key={label} className="rounded-2xl border border-line p-3.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-faint">{label} · {stop.role}</p>
+                        <p className="mt-0.5 font-semibold text-ink">{stop.name}</p>
+                        {stop.address && <p className="mt-0.5 text-sm text-body">{stop.address}</p>}
+                        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
+                          {stop.phone ? (
+                            <a href={`tel:${stop.phone}`} className="flex items-center gap-1.5 font-medium text-primary hover:underline">
+                              <Phone size={13} /> {stop.phone}
+                            </a>
+                          ) : (
+                            <span className="flex items-center gap-1.5 text-faint"><Phone size={13} /> No phone</span>
+                          )}
+                          {link && (
+                            <a href={link} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 font-medium text-primary hover:underline">
+                              <MapPin size={13} /> Open in Maps
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {selected.specialInstructions && (
+                  <div className="mt-3 rounded-2xl bg-section p-3.5 text-sm">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-faint">Notes</p>
+                    <p className="mt-0.5 text-body">{selected.specialInstructions}</p>
+                  </div>
+                )}
 
                 {/* fees */}
                 <div className="mt-4 rounded-2xl bg-section p-4">
@@ -189,10 +330,10 @@ export default function LogisticsPage() {
                   <div className="mt-4 flex items-center justify-between rounded-2xl border border-line p-3 text-sm">
                     <div><p className="text-xs text-faint">Tracking token</p><p className="font-mono text-ink">{selected.trackingToken}</p></div>
                     <button
-                      onClick={() => { navigator.clipboard?.writeText(selected.trackingToken ?? ''); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+                      onClick={() => { navigator.clipboard?.writeText(selected.trackingToken ?? ''); setCopiedToken(true); setTimeout(() => setCopiedToken(false), 1500); }}
                       className="flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-xs text-body hover:bg-section"
                     >
-                      {copied ? <><Check size={13} /> Copied</> : <><Copy size={13} /> Copy</>}
+                      {copiedToken ? <><Check size={13} /> Copied</> : <><Copy size={13} /> Copy</>}
                     </button>
                   </div>
                 )}
@@ -212,7 +353,11 @@ export default function LogisticsPage() {
                           <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-white"><Check size={12} strokeWidth={3} /></span>
                           {i < timeline.length - 1 && <span className="mt-1 w-px flex-1 bg-line" />}
                         </span>
-                        <span><span className="block text-sm font-semibold text-ink">{pretty(t.toStatus)}</span><span className="text-xs text-faint">{formatDateTime(t.createdAt)}</span></span>
+                        <span>
+                          <span className="block text-sm font-semibold text-ink">{pretty(t.toStatus)}</span>
+                          <span className="text-xs text-faint">{formatDateTime(t.createdAt)}{t.triggeredByRole && <> · {pretty(t.triggeredByRole)}</>}</span>
+                          {t.note && <span className="mt-0.5 block text-xs text-body">{t.note}</span>}
+                        </span>
                       </li>
                     ))}
                   </ol>
@@ -220,10 +365,24 @@ export default function LogisticsPage() {
               </div>
             </div>
 
-            <div className="flex gap-3 border-t border-line px-6 py-4">
+            {/* footer actions — guarded to the leg's current stage */}
+            <div className="flex flex-wrap gap-3 border-t border-line px-6 py-4">
               <Button variant="outline" className="flex-1" onClick={() => setSelected(null)}>Close</Button>
               {needsRep && (
                 <Button className="flex-1" onClick={() => { setRepId(''); setAssignOpen(true); }}>Assign Rep</Button>
+              )}
+              {canPickup && (
+                <Button className="flex-1" loading={busy} onClick={() => runAction(() => api.post(`/logistics/${selected.id}/admin/picked-up`))}>
+                  Mark picked up
+                </Button>
+              )}
+              {canDeliver && (
+                <Button className="flex-1" loading={busy} onClick={() => setDeliverOpen(true)}>Mark delivered</Button>
+              )}
+              {canCancel && (
+                <Button variant="outline" className="flex-1 !border-danger !text-danger hover:!bg-danger-bg" onClick={() => { setCancelReason(''); setCancelOpen(true); }}>
+                  Cancel job
+                </Button>
               )}
             </div>
           </div>
@@ -246,6 +405,51 @@ export default function LogisticsPage() {
           <div className="flex gap-3 pt-1">
             <Button variant="outline" className="flex-1" onClick={() => setAssignOpen(false)}>Cancel</Button>
             <Button className="flex-1" loading={busy} disabled={!repId} onClick={assignRep}>Assign Rep</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Mark delivered — settles money, so confirm explicitly */}
+      <Modal open={deliverOpen} onClose={() => setDeliverOpen(false)} title={`Mark delivered — ${selected?.reference ?? ''}`}>
+        <div className="space-y-4">
+          <p className="text-sm text-body">
+            This completes the leg and <span className="font-semibold text-ink">releases escrow</span> — the rep is paid the transport fee and the platform takes the mobility fee. Only do this once the clothes have actually been delivered.
+          </p>
+          <div className="flex gap-3">
+            <Button variant="outline" className="flex-1" onClick={() => setDeliverOpen(false)}>Back</Button>
+            <Button className="flex-1" loading={busy} onClick={() => selected && runAction(() => api.post(`/logistics/${selected.id}/admin/delivered`), () => setDeliverOpen(false))}>
+              Confirm delivered
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Cancel job — refunds the payer if already paid */}
+      <Modal open={cancelOpen} onClose={() => setCancelOpen(false)} title={`Cancel job — ${selected?.reference ?? ''}`}>
+        <div className="space-y-4">
+          <p className="text-sm text-body">
+            Cancels this leg and kills any live rep offer. If it was already paid, the payer is refunded and escrow is released. This can&apos;t be undone.
+          </p>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-ink">Reason <span className="text-faint">(optional)</span></label>
+            <textarea
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              rows={3}
+              maxLength={500}
+              placeholder="e.g. Rep unavailable; vendor rescheduled"
+              className="w-full rounded-xl border border-line px-3 py-2 text-sm text-ink outline-none focus:border-primary"
+            />
+          </div>
+          <div className="flex gap-3">
+            <Button variant="outline" className="flex-1" onClick={() => setCancelOpen(false)}>Back</Button>
+            <Button
+              className="flex-1 !bg-danger hover:!bg-danger"
+              loading={busy}
+              onClick={() => selected && runAction(() => api.post(`/logistics/${selected.id}/admin/cancel`, { reason: cancelReason.trim() || undefined }), () => setCancelOpen(false))}
+            >
+              Cancel this job
+            </Button>
           </div>
         </div>
       </Modal>
