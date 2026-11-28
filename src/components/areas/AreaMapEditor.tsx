@@ -4,7 +4,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { Search, X, MapPin, Crosshair } from 'lucide-react';
+import {
+  placeAutocomplete,
+  placeDetails,
+  newSessionToken,
+  type PlaceSuggestion,
+} from '@/lib/places';
 
+// Map tiles/markers are rendered by Mapbox GL, so the coverage map still needs
+// this token. Place *search*, however, now goes through the backend's Google
+// Places proxy (better Nigerian locality coverage) — see @/lib/places.
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? '';
 
 /**
@@ -22,8 +31,6 @@ export type DraftLocation = {
 /** Rows that actually have a pin (drawable on the map). */
 const placed = (l: DraftLocation): l is DraftLocation & { centerLat: number; centerLng: number } =>
   l.centerLat != null && l.centerLng != null;
-
-type GeocodeHit = { name: string; placeName: string; lat: number; lng: number };
 
 /** Build a ~64-point circle polygon (GeoJSON) around a center, radius in km. */
 function circlePolygon(lng: number, lat: number, radiusKm: number): GeoJSON.Feature {
@@ -62,9 +69,11 @@ export function AreaMapEditor({
 
   const [ready, setReady] = useState(false);
   const [query, setQuery] = useState('');
-  const [hits, setHits] = useState<GeocodeHit[]>([]);
+  const [hits, setHits] = useState<PlaceSuggestion[]>([]);
   const [searching, setSearching] = useState(false);
   const [noHits, setNoHits] = useState(false);
+  // One Places session token per "search → pick" cycle (billing).
+  const sessionRef = useRef('');
   // "Drop pin" mode: next map click places a town manually — the escape hatch for
   // localities Mapbox's Nigerian data doesn't know by name (e.g. Ikate).
   const [dropMode, setDropMode] = useState(false);
@@ -166,42 +175,51 @@ export function AreaMapEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locations, ready]);
 
-  // ── geocode search (Mapbox Geocoding API, Nigeria-bounded) ──────────────────
-  // No `types` filter: Mapbox's Nigerian locality data is thin (e.g. "Ikate" only
-  // exists via its streets), so streets/POIs are useful anchors — the admin picks
-  // the closest hit and drags the pin. Proximity-biased to the current map view.
+  // ── place search (Google Places via the backend proxy, Nigeria-bounded) ─────
+  // Predictions carry no coordinates; picking one resolves them via details.
+  // Proximity-biased to the current map view for more relevant hits.
   const search = useCallback(async () => {
     const q = query.trim();
-    if (!q || !TOKEN) return;
+    if (!q) return;
+    if (!sessionRef.current) sessionRef.current = newSessionToken();
     setSearching(true);
     setNoHits(false);
     try {
       const center = mapRef.current?.getCenter();
-      const proximity = center ? `&proximity=${center.lng.toFixed(4)},${center.lat.toFixed(4)}` : '';
-      const res = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${TOKEN}&country=ng&limit=6${proximity}`,
-      );
-      const data = await res.json();
-      const found = (data.features ?? []).map(
-        (f: { text: string; place_name: string; center: [number, number] }) => ({
-          name: f.text, placeName: f.place_name, lng: f.center[0], lat: f.center[1],
-        }),
-      );
+      const found = await placeAutocomplete(q, {
+        sessionToken: sessionRef.current,
+        proximity: center ? { latitude: center.lat, longitude: center.lng } : undefined,
+      });
       setHits(found);
       setNoHits(found.length === 0);
+    } catch {
+      setHits([]);
+      setNoHits(true);
     } finally {
       setSearching(false);
     }
   }, [query]);
 
-  function addHit(h: GeocodeHit) {
+  async function addHit(h: PlaceSuggestion) {
     // The admin's typed name is the town name (a hit may just be a street anchor
     // inside it, e.g. searching "Ikate" and picking "Kate Elegushi Road").
-    const name = query.trim() || h.name;
-    onChange([...locations, { name, centerLat: h.lat, centerLng: h.lng, radiusKm: 2 }]);
     setHits([]);
-    setQuery('');
-    setNoHits(false);
+    setSearching(true);
+    try {
+      const loc = await placeDetails(h.placeId, sessionRef.current);
+      const name = query.trim() || loc.name;
+      onChange([
+        ...locations,
+        { name, centerLat: loc.latitude, centerLng: loc.longitude, radiusKm: 2 },
+      ]);
+      setQuery('');
+      setNoHits(false);
+    } catch {
+      setNoHits(true);
+    } finally {
+      sessionRef.current = '';
+      setSearching(false);
+    }
   }
 
   function updateLoc(i: number, patch: Partial<DraftLocation>) {
@@ -254,7 +272,7 @@ export function AreaMapEditor({
         </div>
         {noHits && !dropMode && (
           <p className="mt-1.5 text-xs text-warn">
-            No match for &ldquo;{query}&rdquo; — Mapbox doesn&apos;t know every Nigerian locality by name. Use{' '}
+            No match for &ldquo;{query}&rdquo; — we don&apos;t know every Nigerian locality by name. Use{' '}
             <button type="button" onClick={() => setDropMode(true)} className="font-semibold underline">Drop pin</button>{' '}
             to place it on the map yourself (your typed name will be used).
           </p>
@@ -266,8 +284,8 @@ export function AreaMapEditor({
         )}
         {hits.length > 0 && (
           <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-2xl border border-line bg-white shadow-xl">
-            {hits.map((h, i) => (
-              <button key={i} type="button" onClick={() => addHit(h)}
+            {hits.map((h) => (
+              <button key={h.placeId} type="button" onClick={() => void addHit(h)}
                 className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-section">
                 <MapPin size={14} className="shrink-0 text-primary" />
                 <span className="truncate">{h.placeName}</span>
